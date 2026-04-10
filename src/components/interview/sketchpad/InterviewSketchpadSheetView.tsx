@@ -1,0 +1,241 @@
+import {
+  ArrowDownToLine,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Mic,
+  NotebookPen,
+  Square,
+  Workflow,
+} from "lucide-react";
+import type {
+  SketchpadActions,
+  SketchpadQuestionViewState,
+} from "@/components/interview/sketchpad/sketchpadTypes";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
+
+type InterviewSketchpadSheetViewProps = {
+  open: boolean;
+  notes: string;
+  displayedTranscriptionBuffer: string;
+  question: SketchpadQuestionViewState;
+  hasNotes: boolean;
+  hasTranscriptionBuffer: boolean;
+  isRecording: boolean;
+  transcriptionError: string | null;
+  saveHint: string;
+  actions: SketchpadActions;
+};
+
+export function InterviewSketchpadSheetView({
+  open,
+  notes,
+  displayedTranscriptionBuffer,
+  question,
+  hasNotes,
+  hasTranscriptionBuffer,
+  isRecording,
+  transcriptionError,
+  saveHint,
+  actions,
+}: InterviewSketchpadSheetViewProps) {
+  return (
+    <Sheet open={open} onOpenChange={actions.handleOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-[100vw] max-w-none p-0 sm:w-[56vw] md:w-[52vw] lg:w-[50vw] xl:w-[48vw]"
+        onInteractOutside={(event) => {
+          const target = event.target as HTMLElement | null;
+          if (target?.closest("[data-resume-reference-card='true']")) {
+            event.preventDefault();
+          }
+        }}
+      >
+        <div className="flex h-full flex-col bg-slate-50">
+          <SheetHeader className="border-b border-slate-200 px-6 py-5 text-left">
+            <SheetTitle className="flex items-center gap-2 text-lg">
+              <NotebookPen className="h-4 w-4" />
+              构思板
+            </SheetTitle>
+            <SheetDescription className="text-sm text-slate-500">
+              先记录想法、整理表达，再把打磨后的内容带回面试输入框。
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="border-b border-slate-200 px-6 py-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                  <Workflow className="h-4 w-4 text-slate-500" />
+                  当前题目
+                  {question.questionNumber ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
+                      Q{question.questionNumber}
+                    </span>
+                  ) : null}
+                  {question.isSyncing ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
+                      同步中
+                    </span>
+                  ) : null}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 rounded-full px-3 text-xs text-slate-500"
+                  onClick={() => actions.setCollapsed(!question.isCollapsed)}
+                >
+                  {question.isCollapsed ? (
+                    <ChevronDown className="mr-1 h-4 w-4" />
+                  ) : (
+                    <ChevronUp className="mr-1 h-4 w-4" />
+                  )}
+                  {question.isCollapsed ? "展开题目" : "收起题目"}
+                </Button>
+              </div>
+
+              {!question.isCollapsed ? (
+                <p className="mt-3 text-sm leading-7 text-slate-600">
+                  {question.isFinished
+                    ? "本场面试已结束，你仍然可以继续查看并整理当前会话的构思内容。"
+                    : question.questionContent ||
+                      "当前还没有同步到题目内容，开始面试后这里会显示最新问题。"}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <p className="text-sm font-medium text-slate-900">回答提纲</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  先把结构写清楚，再把整理后的内容带回回答框。
+                </p>
+                <Textarea
+                  value={notes}
+                  onChange={(event) => actions.setNotes(event.target.value)}
+                  placeholder={`例如：
+1. 先说明背景
+2. 再解释方案
+3. 最后总结结果`}
+                  className="mt-4 min-h-[320px] resize-none rounded-2xl border-slate-200 bg-slate-50 text-sm leading-7"
+                />
+              </div>
+
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium text-slate-900">
+                    语音转写缓冲区
+                  </p>
+                  {isRecording ? (
+                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-600">
+                      正在转写
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  可以先口述思路，转写结果会落在这里，整理后再追加到提纲中。
+                </p>
+                <Textarea
+                  value={displayedTranscriptionBuffer}
+                  onChange={(event) =>
+                    actions.setTranscriptionBuffer(event.target.value)
+                  }
+                  placeholder="开始转写后，这里会显示语音识别结果。"
+                  readOnly={isRecording}
+                  className="mt-4 min-h-[160px] resize-none rounded-2xl border-slate-200 bg-white text-sm leading-7"
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    className="rounded-full"
+                    variant={isRecording ? "destructive" : "secondary"}
+                    onClick={() => {
+                      void actions.toggleRecording();
+                    }}
+                  >
+                    {isRecording ? (
+                      <Square className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Mic className="mr-2 h-4 w-4" />
+                    )}
+                    {isRecording ? "停止转写" : "开始转写"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={actions.appendTranscriptionToNotes}
+                    disabled={!hasTranscriptionBuffer}
+                  >
+                    <ArrowDownToLine className="mr-2 h-4 w-4" />
+                    追加到提纲
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => {
+                      void actions.copyTranscription();
+                    }}
+                    disabled={!hasTranscriptionBuffer}
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    复制文本
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={actions.clearTranscription}
+                    disabled={!hasTranscriptionBuffer || isRecording}
+                  >
+                    清空缓冲区
+                  </Button>
+                </div>
+                {transcriptionError ? (
+                  <p className="mt-3 text-xs text-red-500">
+                    {transcriptionError}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  className="rounded-full"
+                  onClick={actions.insertNotes}
+                  disabled={!hasNotes}
+                >
+                  插入回答框
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={actions.clearNotes}
+                  disabled={!hasNotes}
+                >
+                  清空提纲
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 px-6 py-3 text-xs text-slate-400">
+            {saveHint}
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
