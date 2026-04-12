@@ -111,6 +111,7 @@
 
 .sketchpad-transcription-live {
   isolation: isolate;
+  overflow: hidden;
 }
 
 .sketchpad-transcription-live::after {
@@ -125,7 +126,8 @@
     rgba(248, 113, 113, 0.08) 42%,
     transparent 72%
   );
-  animation: sketchpad-transcription-shimmer 1.6s linear infinite;
+  background-size: 180% 100%;
+  animation: sketchpad-transcription-shimmer 1.8s linear infinite;
 }
 
 .sketchpad-transcription-updated textarea {
@@ -192,20 +194,18 @@
 
 @keyframes sketchpad-transcription-shimmer {
   from {
-    transform: translateX(-42%);
+    background-position: 140% 0;
   }
   to {
-    transform: translateX(42%);
+    background-position: -40% 0;
   }
 }
 
 @keyframes sketchpad-transcription-reveal {
   from {
     opacity: 0.82;
-    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }

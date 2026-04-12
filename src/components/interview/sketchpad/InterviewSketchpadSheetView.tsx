@@ -190,7 +190,7 @@ export function InterviewSketchpadSheetView({
                 </p>
                 <div
                   className={cn(
-                    "relative mt-4",
+                    "relative mt-4 overflow-hidden rounded-2xl",
                     isRecording && "sketchpad-transcription-live",
                   )}
                 >
