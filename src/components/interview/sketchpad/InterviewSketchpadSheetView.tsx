@@ -12,6 +12,7 @@ import type {
   SketchpadActions,
   SketchpadQuestionViewState,
 } from "@/components/interview/sketchpad/sketchpadTypes";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -47,6 +48,12 @@ export function InterviewSketchpadSheetView({
   saveHint,
   actions,
 }: InterviewSketchpadSheetViewProps) {
+  const transcriptionHint = isRecording
+    ? "正在实时转写，你可以持续口述思路。"
+    : hasTranscriptionBuffer
+      ? "已捕获转写内容，可编辑后追加到提纲中。"
+      : "可以先口述思路，转写结果会落在这里，整理后再追加到提纲中。";
+
   return (
     <Sheet open={open} onOpenChange={actions.handleOpenChange}>
       <SheetContent
@@ -133,40 +140,91 @@ export function InterviewSketchpadSheetView({
                 />
               </div>
 
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-4">
+              <div
+                className={cn(
+                  "rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-4 transition-colors duration-200",
+                  isRecording && "border-red-200 bg-red-50/40",
+                  transcriptionError && "border-red-300 bg-red-50/50",
+                )}
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-medium text-slate-900">
                     语音转写缓冲区
                   </p>
-                  {isRecording ? (
-                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-600">
-                      正在转写
-                    </span>
-                  ) : null}
+                  <span
+                    aria-live="polite"
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
+                      transcriptionError
+                        ? "bg-red-100 text-red-700"
+                        : isRecording
+                          ? "bg-red-100 text-red-700"
+                          : hasTranscriptionBuffer
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-slate-100 text-slate-500",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        transcriptionError
+                          ? "bg-red-500"
+                          : isRecording
+                            ? "bg-red-500 sketchpad-status-dot-pulse"
+                            : hasTranscriptionBuffer
+                              ? "bg-emerald-500"
+                              : "bg-slate-400",
+                      )}
+                    />
+                    {transcriptionError
+                      ? "转写异常"
+                      : isRecording
+                        ? "正在转写"
+                        : hasTranscriptionBuffer
+                          ? "已更新"
+                          : "待开始"}
+                  </span>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  可以先口述思路，转写结果会落在这里，整理后再追加到提纲中。
+                  {transcriptionHint}
                 </p>
-                <Textarea
-                  value={displayedTranscriptionBuffer}
-                  onChange={(event) =>
-                    actions.setTranscriptionBuffer(event.target.value)
-                  }
-                  placeholder="开始转写后，这里会显示语音识别结果。"
-                  readOnly={isRecording}
-                  className="mt-4 min-h-[160px] resize-none rounded-2xl border-slate-200 bg-white text-sm leading-7"
-                />
+                <div
+                  className={cn(
+                    "relative mt-4",
+                    isRecording && "sketchpad-transcription-live",
+                  )}
+                >
+                  <Textarea
+                    value={displayedTranscriptionBuffer}
+                    onChange={(event) =>
+                      actions.setTranscriptionBuffer(event.target.value)
+                    }
+                    placeholder="开始转写后，这里会显示语音识别结果。"
+                    readOnly={isRecording}
+                    className={cn(
+                      "min-h-[160px] resize-none rounded-2xl border-slate-200 bg-white text-sm leading-7 transition-colors duration-200",
+                      isRecording && "border-red-200 pr-10",
+                    )}
+                  />
+                  {isRecording ? (
+                    <span className="pointer-events-none absolute bottom-4 right-4 h-2 w-2 rounded-full bg-red-500 sketchpad-recording-ping" />
+                  ) : null}
+                </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     type="button"
-                    className="rounded-full"
+                    className={cn(
+                      "rounded-full transition-all duration-200",
+                      isRecording &&
+                        "sketchpad-mic-active shadow-sm shadow-red-200",
+                    )}
                     variant={isRecording ? "destructive" : "secondary"}
                     onClick={() => {
                       void actions.toggleRecording();
                     }}
                   >
                     {isRecording ? (
-                      <Square className="mr-2 h-4 w-4" />
+                      <Square className="mr-2 h-4 w-4 sketchpad-recording-icon" />
                     ) : (
                       <Mic className="mr-2 h-4 w-4" />
                     )}

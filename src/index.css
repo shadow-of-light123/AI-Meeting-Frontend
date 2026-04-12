@@ -92,3 +92,120 @@
     transform: translateY(0);
   }
 }
+
+.sketchpad-mic-active {
+  animation: sketchpad-mic-pulse 1.4s ease-in-out infinite;
+}
+
+.sketchpad-recording-icon {
+  animation: sketchpad-recording-icon 1s ease-in-out infinite;
+}
+
+.sketchpad-status-dot-pulse {
+  animation: sketchpad-status-dot-pulse 1.2s ease-out infinite;
+}
+
+.sketchpad-recording-ping {
+  animation: sketchpad-recording-ping 1.4s ease-out infinite;
+}
+
+.sketchpad-transcription-live {
+  isolation: isolate;
+}
+
+.sketchpad-transcription-live::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 1rem;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 10%,
+    rgba(248, 113, 113, 0.08) 42%,
+    transparent 72%
+  );
+  animation: sketchpad-transcription-shimmer 1.6s linear infinite;
+}
+
+.sketchpad-transcription-updated textarea {
+  animation: sketchpad-transcription-reveal 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sketchpad-mic-active,
+  .sketchpad-recording-icon,
+  .sketchpad-status-dot-pulse,
+  .sketchpad-recording-ping,
+  .sketchpad-transcription-live::after,
+  .sketchpad-transcription-updated textarea {
+    animation: none !important;
+  }
+}
+
+@keyframes sketchpad-mic-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes sketchpad-recording-icon {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.85);
+  }
+}
+
+@keyframes sketchpad-status-dot-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes sketchpad-recording-ping {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes sketchpad-transcription-shimmer {
+  from {
+    transform: translateX(-42%);
+  }
+  to {
+    transform: translateX(42%);
+  }
+}
+
+@keyframes sketchpad-transcription-reveal {
+  from {
+    opacity: 0.82;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

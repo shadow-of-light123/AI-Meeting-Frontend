@@ -124,7 +124,6 @@ export default function InterviewResumeReferenceCard({
               resumePreviewError={resumePreviewError}
               resumeOpenPreviewUrl={resumeOpenPreviewUrl}
               numPages={numPages}
-              maxPages={1}
               onLoadSuccess={onLoadSuccess}
               onLoadError={onLoadError}
             />

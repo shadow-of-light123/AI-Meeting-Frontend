@@ -45,7 +45,6 @@ describe("InterviewResumeReferenceCard", () => {
     expect(screen.getByTestId("resume-preview-content")).toBeTruthy();
     expect(previewContentSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        maxPages: 1,
         numPages: 3,
         resumePreviewSource: "blob:resume",
       }),
