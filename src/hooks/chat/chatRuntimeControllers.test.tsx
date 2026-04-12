@@ -14,9 +14,10 @@ const navigateMock = vi.fn();
 const authLogoutMock = vi.fn();
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>(
-    "react-router-dom",
-  );
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -73,6 +74,7 @@ const createStore = () =>
         error: null,
         currentSessionId: "session-1",
         currentSessionTitle: "Session 1",
+        pendingOutbound: null,
         activeStreamRequestId: null,
         activeStreamSessionId: null,
         activeStreamMessageId: null,
@@ -127,7 +129,9 @@ describe("chat runtime reset entrypoints", () => {
   });
 
   it("resets the chat runtime after logout before navigating to auth", async () => {
-    const { result, store } = renderWithStore(() => useSidebarFooterController());
+    const { result, store } = renderWithStore(() =>
+      useSidebarFooterController(),
+    );
 
     await act(async () => {
       await result.current.handleLogout();

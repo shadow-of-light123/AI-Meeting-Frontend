@@ -6,7 +6,9 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUTES } from "@/lib/constants";
 import { useChatPageController } from "@/hooks/chat/useChatPageController";
-import chatReducer, { initialState as initialChatState } from "@/store/slices/chatSlice";
+import chatReducer, {
+  initialState as initialChatState,
+} from "@/store/slices/chatSlice";
 import userReducer from "@/store/slices/userSlice";
 import type { ChatMessage } from "@/lib/chat";
 
@@ -18,9 +20,10 @@ const createConversationMock = vi.fn();
 const streamChatMock = vi.fn();
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>(
-    "react-router-dom",
-  );
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -59,9 +62,7 @@ const createDeferred = <T,>() => {
   return { promise, resolve, reject };
 };
 
-const createStore = (
-  chatState: Partial<typeof initialChatState> = {},
-) =>
+const createStore = (chatState: Partial<typeof initialChatState> = {}) =>
   configureStore({
     reducer: {
       user: userReducer,
@@ -134,6 +135,7 @@ describe("useChatPageController", () => {
         _signal: AbortSignal,
         callbacks: {
           onMessage: (chunk: string) => void;
+          onReasoning?: (chunk: string) => void;
           onDone?: () => void;
         },
       ) => {
@@ -185,9 +187,9 @@ describe("useChatPageController", () => {
     );
     expect(store.getState().chat.currentSessionId).toBe("session-created");
     expect(
-      store.getState().chat.messages.some(
-        (message) => message.content === "hello from home",
-      ),
+      store
+        .getState()
+        .chat.messages.some((message) => message.content === "hello from home"),
     ).toBe(true);
   });
 
@@ -320,8 +322,8 @@ describe("useChatPageController", () => {
     );
   });
 
-  it("creates a conversation before streaming when there is no active session", async () => {
-    const { result, store } = renderChatController();
+  it("creates a conversation first and starts stream after route session is ready", async () => {
+    const { result, store, rerender } = renderChatController();
 
     act(() => {
       result.current.composer.setInput("start from scratch");
@@ -332,6 +334,21 @@ describe("useChatPageController", () => {
     });
 
     expect(createConversationMock).toHaveBeenCalledTimes(1);
+    expect(createConversationMock.mock.calls[0]?.[0]).toMatchObject({
+      firstMessage: "start from scratch",
+    });
+    expect(streamChatMock).toHaveBeenCalledTimes(0);
+    expect(store.getState().chat.pendingOutbound).not.toBeNull();
+
+    useParamsMock.mockReturnValue({
+      sessionId: "session-created",
+    });
+    rerender();
+
+    await waitFor(() => {
+      expect(streamChatMock).toHaveBeenCalledTimes(1);
+    });
+
     expect(streamChatMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: "session-created",
@@ -341,6 +358,102 @@ describe("useChatPageController", () => {
       expect.any(Object),
     );
     expect(store.getState().chat.currentSessionId).toBe("session-created");
+    expect(store.getState().chat.pendingOutbound).toBeNull();
+  });
+
+  it("renders reasoning-only first response without requiring content chunks", async () => {
+    useParamsMock.mockReturnValue({
+      sessionId: "reasoning-session",
+    });
+    streamChatMock.mockImplementation(
+      async (
+        _params: unknown,
+        _signal: AbortSignal,
+        callbacks: {
+          onMessage: (chunk: string) => void;
+          onReasoning?: (chunk: string) => void;
+          onDone?: () => void;
+        },
+      ) => {
+        callbacks.onReasoning?.("嗯，用户");
+        callbacks.onReasoning?.("继续补充");
+        callbacks.onDone?.();
+      },
+    );
+
+    const { result } = renderChatController({
+      currentSessionId: "reasoning-session",
+      currentSessionTitle: "Reasoning Session",
+      messages: [
+        {
+          id: "seed-reasoning",
+          role: "assistant",
+          content: "seed",
+          timestamp: 1,
+          status: "done",
+        },
+      ] as ChatMessage[],
+    });
+
+    act(() => {
+      result.current.composer.setInput("你好");
+    });
+
+    await act(async () => {
+      result.current.composer.handleSend();
+    });
+
+    await waitFor(() => {
+      const assistant = [...result.current.history.messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.role === "assistant" && message.id !== "seed-reasoning",
+        );
+      expect(assistant?.reasoning).toContain("嗯，用户");
+      expect(assistant?.content).toBe("");
+      expect(assistant?.status).toBe("done");
+    });
+  });
+
+  it("cancels pending first-message stream when user switches to another session", async () => {
+    const { result, store, rerender } = renderChatController();
+
+    act(() => {
+      result.current.composer.setInput("first pending");
+    });
+
+    await act(async () => {
+      result.current.composer.handleSend();
+    });
+
+    expect(createConversationMock).toHaveBeenCalledTimes(1);
+    expect(streamChatMock).toHaveBeenCalledTimes(0);
+    expect(store.getState().chat.pendingOutbound?.sessionId).toBe(
+      "session-created",
+    );
+
+    useParamsMock.mockReturnValue({
+      sessionId: "session-b",
+    });
+    getConversationHistoryMock.mockResolvedValueOnce([
+      {
+        id: "history-b",
+        sessionId: "session-b",
+        messageType: 2,
+        messageContent: "loaded b",
+        messageSeq: 1,
+        createTime: "2025-01-01T00:00:02.000Z",
+      },
+    ]);
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current.history.messages[0]?.content).toBe("loaded b");
+    });
+
+    expect(streamChatMock).toHaveBeenCalledTimes(0);
+    expect(store.getState().chat.pendingOutbound).toBeNull();
   });
 
   it("drops stale stream chunks after switching to another session", async () => {

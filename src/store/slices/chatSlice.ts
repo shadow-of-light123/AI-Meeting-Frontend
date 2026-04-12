@@ -2,12 +2,21 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import type { ChatMessage } from "@/lib/chat";
 import { checkAuthStatus, logoutUser } from "@/store/slices/userSlice";
 
+export interface PendingOutbound {
+  requestId: string;
+  sessionId: string;
+  assistantMessageId: string;
+  content: string;
+  aiId?: number;
+}
+
 export interface ChatState {
   messages: ChatMessage[];
   isStreaming: boolean;
   error: string | null;
   currentSessionId: string | null;
   currentSessionTitle: string | null;
+  pendingOutbound: PendingOutbound | null;
   activeStreamRequestId: string | null;
   activeStreamSessionId: string | null;
   activeStreamMessageId: string | null;
@@ -19,6 +28,7 @@ export const initialState: ChatState = {
   error: null,
   currentSessionId: null,
   currentSessionTitle: null,
+  pendingOutbound: null,
   activeStreamRequestId: null,
   activeStreamSessionId: null,
   activeStreamMessageId: null,
@@ -30,6 +40,7 @@ const resetRuntimeState = (state: ChatState) => {
   state.error = null;
   state.currentSessionId = null;
   state.currentSessionTitle = null;
+  state.pendingOutbound = null;
   state.activeStreamRequestId = null;
   state.activeStreamSessionId = null;
   state.activeStreamMessageId = null;
@@ -63,9 +74,16 @@ export const chatSlice = createSlice({
       state.messages = action.payload.messages;
       state.error = null;
       state.isStreaming = false;
+      state.pendingOutbound = null;
       state.activeStreamRequestId = null;
       state.activeStreamSessionId = null;
       state.activeStreamMessageId = null;
+    },
+    setPendingOutbound: (
+      state,
+      action: PayloadAction<PendingOutbound | null>,
+    ) => {
+      state.pendingOutbound = action.payload;
     },
     appendUserMessage: (state, action: PayloadAction<ChatMessage>) => {
       state.messages.push(action.payload);
@@ -79,7 +97,9 @@ export const chatSlice = createSlice({
       state,
       action: PayloadAction<{ id: string; content: string }>,
     ) => {
-      const message = state.messages.find((item) => item.id === action.payload.id);
+      const message = state.messages.find(
+        (item) => item.id === action.payload.id,
+      );
       if (!message) {
         return;
       }
@@ -90,18 +110,19 @@ export const chatSlice = createSlice({
       state,
       action: PayloadAction<{ id: string; reasoning: string }>,
     ) => {
-      const message = state.messages.find((item) => item.id === action.payload.id);
+      const message = state.messages.find(
+        (item) => item.id === action.payload.id,
+      );
       if (!message) {
         return;
       }
       message.reasoning = action.payload.reasoning;
       message.status = "streaming";
     },
-    finishAssistantMessage: (
-      state,
-      action: PayloadAction<{ id: string }>,
-    ) => {
-      const message = state.messages.find((item) => item.id === action.payload.id);
+    finishAssistantMessage: (state, action: PayloadAction<{ id: string }>) => {
+      const message = state.messages.find(
+        (item) => item.id === action.payload.id,
+      );
       if (!message) {
         return;
       }
@@ -111,7 +132,9 @@ export const chatSlice = createSlice({
       state,
       action: PayloadAction<{ id: string; errorMessage: string }>,
     ) => {
-      const message = state.messages.find((item) => item.id === action.payload.id);
+      const message = state.messages.find(
+        (item) => item.id === action.payload.id,
+      );
       if (!message) {
         return;
       }
@@ -123,14 +146,11 @@ export const chatSlice = createSlice({
     },
     setActiveStream: (
       state,
-      action: PayloadAction<
-        | {
-            requestId: string;
-            sessionId: string;
-            messageId: string;
-          }
-        | null
-      >,
+      action: PayloadAction<{
+        requestId: string;
+        sessionId: string;
+        messageId: string;
+      } | null>,
     ) => {
       state.isStreaming = Boolean(action.payload);
       state.activeStreamRequestId = action.payload?.requestId ?? null;
@@ -156,6 +176,7 @@ export const {
   resetChatRuntime,
   setChatRuntimeSession,
   hydrateChatSession,
+  setPendingOutbound,
   appendUserMessage,
   appendAssistantPlaceholder,
   appendAssistantChunk,

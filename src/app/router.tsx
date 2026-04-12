@@ -65,11 +65,7 @@ export const appRoutes: RouteObject[] = [
             element: withRouteSuspense(<InterviewReportPage />),
           },
           {
-            path: ROUTES.chat,
-            element: withRouteSuspense(<ChatPage />),
-          },
-          {
-            path: `${ROUTES.chat}/:sessionId`,
+            path: `${ROUTES.chat}/:sessionId?`,
             element: withRouteSuspense(<ChatPage />),
           },
           {
