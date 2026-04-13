@@ -1,6 +1,4 @@
-import { getAuthToken } from "@/lib/authToken";
-import service from "@/lib/request";
-import { buildApiUrl } from "@/lib/request";
+import service, { assertRequestAuthorized, buildApiUrl } from "@/lib/request";
 import { AppError, ErrorCode } from "@/lib/errors";
 import type { AxiosRequestConfig } from "axios";
 
@@ -587,8 +585,7 @@ const normalizeInterviewSessionRestore = (
     sessionId:
       toNullableString(pickFirst(source, ["sessionId", "session_id"])) ??
       payload.sessionId,
-    status:
-      toNullableString(pickFirst(source, ["status"])) ?? payload.status,
+    status: toNullableString(pickFirst(source, ["status"])) ?? payload.status,
     canResume:
       toBooleanValue(pickFirst(source, ["canResume", "can_resume"])) ??
       payload.canResume,
@@ -714,7 +711,7 @@ export const interviewService = {
     return normalizeInterviewSessionRestore(response);
   },
   fetchInterviewResumePreviewBlob: async (sessionId: string) => {
-    const token = getAuthToken();
+    const token = assertRequestAuthorized(buildResumePreviewPath(sessionId));
     const response = await fetch(
       buildApiUrl(buildResumePreviewPath(sessionId)),
       {

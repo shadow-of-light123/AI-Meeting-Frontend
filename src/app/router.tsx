@@ -10,7 +10,9 @@ import AppLayout from "@/layouts/AppLayout";
 import { ROUTES } from "@/lib/constants";
 
 const AuthPage = lazy(() => import("@/pages/auth/AuthPage"));
-const HomePage = lazy(() => import("@/pages/chat/HomePage"));
+const MarketingHomePage = lazy(
+  () => import("@/pages/marketing/MarketingHomePage"),
+);
 const ChatPage = lazy(() => import("@/pages/chat/ChatPage"));
 const InterviewIntroPage = lazy(
   () => import("@/pages/interview/InterviewIntroPage"),
@@ -38,16 +40,16 @@ export const appRoutes: RouteObject[] = [
     element: <AppLayout />,
     children: [
       {
+        index: true,
+        element: withRouteSuspense(<MarketingHomePage />),
+      },
+      {
         path: ROUTES.auth,
         element: withRouteSuspense(<AuthPage />),
       },
       {
         element: <AuthGuard />,
         children: [
-          {
-            index: true,
-            element: withRouteSuspense(<HomePage />),
-          },
           {
             path: ROUTES.interviewIntro,
             element: withRouteSuspense(<InterviewIntroPage />),
@@ -70,11 +72,11 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: ROUTES.questionBank,
-            element: <Navigate to={ROUTES.home} replace />,
+            element: <Navigate to={ROUTES.chat} replace />,
           },
           {
             path: ROUTES.questionBankManage,
-            element: <Navigate to={ROUTES.home} replace />,
+            element: <Navigate to={ROUTES.chat} replace />,
           },
         ],
       },

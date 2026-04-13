@@ -45,6 +45,64 @@ export interface HttpClient {
 
 export const getApiBaseUrl = () => resolveAppEnv().apiBaseUrl;
 
+const AUTH_FREE_API_PATHS = new Set([
+  "/xunzhi/v1/users/login",
+  "/xunzhi/v1/users/register",
+  "/xunzhi/v1/users/check-login",
+]);
+
+const trimQueryAndHash = (path: string) => {
+  const queryIndex = path.indexOf("?");
+  const hashIndex = path.indexOf("#");
+  const stopIndexes = [queryIndex, hashIndex].filter((index) => index >= 0);
+  if (stopIndexes.length === 0) {
+    return path;
+  }
+  return path.slice(0, Math.min(...stopIndexes));
+};
+
+const normalizeRequestPath = (url?: string) => {
+  if (!url) {
+    return "";
+  }
+
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    try {
+      const parsed = new URL(url);
+      return trimQueryAndHash(parsed.pathname || "");
+    } catch {
+      return "";
+    }
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const normalizedRelative = url.startsWith("/") ? url : `/${url}`;
+  if (normalizedRelative.startsWith(baseUrl)) {
+    return trimQueryAndHash(normalizedRelative.slice(baseUrl.length));
+  }
+
+  return trimQueryAndHash(normalizedRelative);
+};
+
+export const requiresAuthTokenForRequest = (url?: string) => {
+  const path = normalizeRequestPath(url);
+  if (!path.startsWith("/xunzhi/v1/")) {
+    return false;
+  }
+  return !AUTH_FREE_API_PATHS.has(path);
+};
+
+export const assertRequestAuthorized = (url: string | undefined) => {
+  const token = getAuthToken();
+  if (requiresAuthTokenForRequest(url) && !token) {
+    throw new AppError(
+      ErrorCode.UNAUTHORIZED,
+      "Unauthorized. Please sign in again.",
+    );
+  }
+  return token;
+};
+
 export const buildApiUrl = (
   path: string,
   query?: Record<string, string | number | boolean | null | undefined>,
@@ -185,14 +243,13 @@ const axiosInstance = createAxiosClient();
 
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token = getAuthToken();
-    if (!token) {
-      return config;
-    }
+    const token = assertRequestAuthorized(config.url);
 
-    const headers = new AxiosHeaders(config.headers);
-    headers.set("Authorization", `Bearer ${token}`);
-    config.headers = headers;
+    if (token) {
+      const headers = new AxiosHeaders(config.headers);
+      headers.set("Authorization", `Bearer ${token}`);
+      config.headers = headers;
+    }
 
     return config;
   },

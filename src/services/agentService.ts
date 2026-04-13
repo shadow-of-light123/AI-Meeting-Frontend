@@ -1,6 +1,5 @@
 import { fetchEventSource } from "@microsoft/fetch-event-source";
-import { getAuthToken } from "@/lib/authToken";
-import service, { buildApiUrl } from "@/lib/request";
+import service, { assertRequestAuthorized, buildApiUrl } from "@/lib/request";
 import type { StreamCallbacks } from "@/types/ai";
 
 export interface CreateAgentSessionParams {
@@ -158,7 +157,9 @@ export const agentService = {
     signal: AbortSignal,
     callbacks: StreamCallbacks,
   ) => {
-    const token = getAuthToken();
+    const token = assertRequestAuthorized(
+      `/xunzhi/v1/agents/sessions/${encodeURIComponent(params.sessionId)}/chat`,
+    );
     const url = buildApiUrl(
       `/xunzhi/v1/agents/sessions/${encodeURIComponent(params.sessionId)}/chat`,
       {

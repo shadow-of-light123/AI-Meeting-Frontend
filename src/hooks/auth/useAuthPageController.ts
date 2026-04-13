@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ROUTES } from "@/lib/constants";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { clearError, loginUser } from "@/store/slices/userSlice";
@@ -19,6 +19,41 @@ const initialFormData: AuthFormData = {
   confirmPassword: "",
 };
 
+type AuthRedirectState = {
+  from?: {
+    pathname?: string;
+    search?: string;
+    hash?: string;
+  };
+};
+
+const normalizeInAppRedirect = (value: unknown): string | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const pathnameValue =
+    "pathname" in value && typeof value.pathname === "string"
+      ? value.pathname.trim()
+      : "";
+  if (
+    !pathnameValue ||
+    !pathnameValue.startsWith("/") ||
+    pathnameValue.startsWith("//")
+  ) {
+    return null;
+  }
+
+  const searchValue =
+    "search" in value && typeof value.search === "string"
+      ? value.search.trim()
+      : "";
+  const hashValue =
+    "hash" in value && typeof value.hash === "string" ? value.hash.trim() : "";
+
+  return `${pathnameValue}${searchValue}${hashValue}`;
+};
+
 export function useAuthPageController() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [formData, setFormData] = useState<AuthFormData>(initialFormData);
@@ -27,18 +62,22 @@ export function useAuthPageController() {
 
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const { loading, error, isAuthenticated } = useAppSelector(
     (state) => state.user,
   );
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate(ROUTES.home);
+      const redirectState = location.state as AuthRedirectState | null;
+      const redirectPath =
+        normalizeInAppRedirect(redirectState?.from) ?? ROUTES.home;
+      navigate(redirectPath, { replace: true });
     }
     return () => {
       dispatch(clearError());
     };
-  }, [isAuthenticated, navigate, dispatch]);
+  }, [isAuthenticated, location.state, navigate, dispatch]);
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);

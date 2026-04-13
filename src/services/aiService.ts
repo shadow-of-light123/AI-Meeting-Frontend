@@ -1,5 +1,4 @@
-import service, { buildApiUrl } from "@/lib/request";
-import { getAuthToken } from "@/lib/authToken";
+import service, { assertRequestAuthorized, buildApiUrl } from "@/lib/request";
 import type {
   AiConversationsPageResult,
   AiMessageHistoryListResult,
@@ -196,7 +195,9 @@ export const aiService = {
         username: userName,
       },
     );
-    const token = getAuthToken();
+    const token = assertRequestAuthorized(
+      `/xunzhi/v1/ai/sessions/${encodeURIComponent(sessionId)}/chat`,
+    );
 
     let isComplete = false;
 

@@ -19,6 +19,12 @@ vi.mock("@/components/auth/AuthGuard", () => ({
   },
 }));
 
+vi.mock("@/pages/marketing/MarketingHomePage", () => ({
+  default: function MockMarketingHomePage() {
+    return <div>marketing-home-page</div>;
+  },
+}));
+
 vi.mock("@/pages/auth/AuthPage", () => ({
   default: function MockAuthPage() {
     return <div>auth-page</div>;
@@ -28,12 +34,6 @@ vi.mock("@/pages/auth/AuthPage", () => ({
 vi.mock("@/pages/chat/ChatPage", () => ({
   default: function MockChatPage() {
     return <div>chat-page</div>;
-  },
-}));
-
-vi.mock("@/pages/chat/HomePage", () => ({
-  default: function MockHomePage() {
-    return <div>home-page</div>;
   },
 }));
 
@@ -56,6 +56,17 @@ vi.mock("@/pages/interview/InterviewReportPage", () => ({
 }));
 
 describe("appRoutes", () => {
+  it("loads the marketing home route lazily", async () => {
+    const router = createMemoryRouter(appRoutes, {
+      initialEntries: ["/"],
+    });
+
+    render(<RouterProvider router={router} />);
+
+    expect(await screen.findByText("marketing-home-page")).toBeDefined();
+    expect(screen.getByTestId("app-layout")).toBeDefined();
+  });
+
   it("loads the auth route lazily", async () => {
     const router = createMemoryRouter(appRoutes, {
       initialEntries: ["/auth"],

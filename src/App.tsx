@@ -4,6 +4,7 @@ import { appRouter } from "@/app/router";
 import { useAppDispatch } from "@/store/hooks";
 import { checkAuthStatus } from "@/store/slices/userSlice";
 import { Loader2 } from "lucide-react";
+import { getAuthToken } from "@/lib/authToken";
 
 function App() {
   const dispatch = useAppDispatch();
@@ -11,6 +12,12 @@ function App() {
 
   useEffect(() => {
     const initAuth = async () => {
+      const token = getAuthToken();
+      if (!token) {
+        setIsInitializing(false);
+        return;
+      }
+
       try {
         await dispatch(checkAuthStatus()).unwrap();
       } catch (error) {

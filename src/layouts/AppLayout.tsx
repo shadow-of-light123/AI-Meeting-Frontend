@@ -13,13 +13,15 @@ export default function AppLayout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const location = useLocation();
   const isAuthPage = location.pathname.startsWith(ROUTES.auth);
+  const isMarketingHome = location.pathname === ROUTES.home;
+  const hideSidebar = isMarketingHome;
 
   // Force collapse on auth pages; otherwise respect manual toggle.
   const shouldCollapse = isAuthPage || isSidebarCollapsed;
 
   return (
     <div className="flex h-screen overflow-hidden bg-white">
-      {!isMobile && (
+      {!isMobile && !hideSidebar && (
         <aside
           className={cn(
             "hidden md:block flex-shrink-0 relative transition-all",
@@ -37,19 +39,21 @@ export default function AppLayout() {
         </aside>
       )}
 
-      <Sheet key={location.pathname}>
-        <SheetTrigger asChild>
-          <Button
-            variant="ghost"
-            className="md:hidden absolute left-4 top-4 z-50 p-2"
-          >
-            <Menu />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-72">
-          <Sidebar />
-        </SheetContent>
-      </Sheet>
+      {!hideSidebar ? (
+        <Sheet key={location.pathname}>
+          <SheetTrigger asChild>
+            <Button
+              variant="ghost"
+              className="md:hidden absolute left-4 top-4 z-50 p-2"
+            >
+              <Menu />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-72">
+            <Sidebar />
+          </SheetContent>
+        </Sheet>
+      ) : null}
 
       <main className="flex-1 overflow-hidden relative w-full bg-white">
         <div key={location.pathname} className="page-transition h-full min-h-0">

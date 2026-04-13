@@ -1,13 +1,46 @@
 import type { AxiosError } from "axios";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { getAuthToken } from "@/lib/authToken";
 import { AppError, ErrorCode } from "@/lib/errors";
 import {
+  assertRequestAuthorized,
   buildApiUrl,
   mapAxiosErrorToAppError,
+  requiresAuthTokenForRequest,
   unwrapResponseData,
 } from "@/lib/request";
 
+vi.mock("@/lib/authToken", () => ({
+  getAuthToken: vi.fn(),
+}));
+
 describe("request utilities", () => {
+  it("requires auth token for protected business endpoints", () => {
+    expect(requiresAuthTokenForRequest("/xunzhi/v1/interview/sessions")).toBe(
+      true,
+    );
+    expect(requiresAuthTokenForRequest("/xunzhi/v1/users/login")).toBe(false);
+  });
+
+  it("throws unauthorized before request when protected endpoint has no token", () => {
+    vi.mocked(getAuthToken).mockReturnValue(null);
+
+    expect(() =>
+      assertRequestAuthorized("/xunzhi/v1/interview/sessions"),
+    ).toThrow(AppError);
+    expect(() =>
+      assertRequestAuthorized("/xunzhi/v1/interview/sessions"),
+    ).toThrow("Unauthorized");
+  });
+
+  it("allows protected endpoint when token exists", () => {
+    vi.mocked(getAuthToken).mockReturnValue("token-value");
+
+    expect(assertRequestAuthorized("/xunzhi/v1/interview/sessions")).toBe(
+      "token-value",
+    );
+  });
+
   it("buildApiUrl should append query params and skip empty values", () => {
     const url = buildApiUrl("/hello", {
       a: 1,

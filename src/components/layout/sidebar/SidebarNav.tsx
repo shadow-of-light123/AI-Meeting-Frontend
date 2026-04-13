@@ -10,14 +10,18 @@ type SidebarNavProps = {
 
 export default function SidebarNav({ isCollapsed }: SidebarNavProps) {
   const location = useLocation();
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) =>
+    path === ROUTES.chat
+      ? location.pathname === ROUTES.chat ||
+        location.pathname.startsWith(`${ROUTES.chat}/`)
+      : location.pathname === path;
 
   return (
     <div className="px-3">
       <div className="space-y-1">
-        <Link to={ROUTES.home}>
+        <Link to={ROUTES.chat}>
           <Button
-            variant={isActive(ROUTES.home) ? "secondary" : "ghost"}
+            variant={isActive(ROUTES.chat) ? "secondary" : "ghost"}
             className={cn(
               "w-full rounded-full",
               isCollapsed ? "justify-center" : "justify-start",
