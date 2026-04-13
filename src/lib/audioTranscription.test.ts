@@ -78,7 +78,7 @@ describe("audio transcription packet handling", () => {
       text: "final answer",
     });
 
-    expect(archivedState.liveText).toBe("final answer");
+    expect(archivedState.liveText).toBe("");
     expect(archivedState.finalText).toBe("final answer");
     expect(getMergedAudioTranscription(archivedState)).toBe("final answer");
   });
@@ -94,7 +94,7 @@ describe("audio transcription packet handling", () => {
       text: "",
     });
 
-    expect(archivedState.liveText).toBe("partial answer");
+    expect(archivedState.liveText).toBe("");
     expect(archivedState.finalText).toBe("partial answer");
   });
 
@@ -109,8 +109,40 @@ describe("audio transcription packet handling", () => {
       text: "same final",
     });
 
-    expect(twiceArchived.liveText).toBe("same final");
+    expect(twiceArchived.liveText).toBe("");
     expect(twiceArchived.finalText).toBe("same final");
+  });
+
+  it("keeps archived text when the next replace packet is a new segment", () => {
+    const initialState = createInitialAudioTranscriptionState();
+    const archivedState = reduceAudioTranscriptionState(initialState, {
+      kind: "archive",
+      text: "first final segment",
+    });
+    const nextSegmentState = reduceAudioTranscriptionState(archivedState, {
+      kind: "replace",
+      text: "second segment partial",
+    });
+
+    expect(nextSegmentState.finalText).toBe("first final segment");
+    expect(nextSegmentState.liveText).toBe("second segment partial");
+    expect(getMergedAudioTranscription(nextSegmentState)).toBe(
+      "first final segment\n\nsecond segment partial",
+    );
+  });
+
+  it("ignores empty replace packets instead of clearing captured text", () => {
+    const initialState = createInitialAudioTranscriptionState();
+    const capturedState = reduceAudioTranscriptionState(initialState, {
+      kind: "archive",
+      text: "captured final segment",
+    });
+    const afterEmptyReplace = reduceAudioTranscriptionState(capturedState, {
+      kind: "replace",
+      text: "   ",
+    });
+
+    expect(afterEmptyReplace).toEqual(capturedState);
   });
 
   it("resets state when transcription session restarts", () => {

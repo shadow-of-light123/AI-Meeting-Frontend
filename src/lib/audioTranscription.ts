@@ -30,6 +30,33 @@ export const createInitialAudioTranscriptionState =
 
 const normalizeText = (value?: string | null) => value?.trim() ?? "";
 
+const mergeDistinctTranscription = (base: string, next: string) => {
+  const normalizedBase = normalizeText(base);
+  const normalizedNext = normalizeText(next);
+
+  if (!normalizedBase) {
+    return normalizedNext;
+  }
+
+  if (!normalizedNext) {
+    return normalizedBase;
+  }
+
+  if (normalizedBase === normalizedNext) {
+    return normalizedBase;
+  }
+
+  if (normalizedBase.includes(normalizedNext)) {
+    return normalizedBase;
+  }
+
+  if (normalizedNext.includes(normalizedBase)) {
+    return normalizedNext;
+  }
+
+  return `${normalizedBase}\n\n${normalizedNext}`;
+};
+
 export const resolveAudioTranscriptionEvent = (
   message: AudioToTextIncomingMessage,
 ): AudioTranscriptionEvent => {
@@ -81,34 +108,44 @@ export const reduceAudioTranscriptionState = (
   switch (event.kind) {
     case "reset":
       return createInitialAudioTranscriptionState();
-    case "replace":
-      if (event.text === state.liveText && !state.finalText) {
-        return state;
-      }
-      return {
-        ...state,
-        liveText: event.text,
-        finalText: "",
-      };
-    case "archive": {
-      const finalizedText =
-        normalizeText(event.text) ||
-        normalizeText(state.liveText) ||
-        normalizeText(state.finalText);
-      if (!finalizedText) {
+    case "replace": {
+      const nextLiveText = normalizeText(event.text);
+      if (!nextLiveText) {
         return state;
       }
 
       if (
-        finalizedText === state.finalText &&
-        finalizedText === state.liveText
+        nextLiveText === state.liveText &&
+        (!state.finalText || nextLiveText === state.finalText)
       ) {
         return state;
       }
 
       return {
-        liveText: finalizedText,
-        finalText: finalizedText,
+        ...state,
+        liveText: nextLiveText,
+      };
+    }
+    case "archive": {
+      const archivedText =
+        normalizeText(event.text) ||
+        normalizeText(state.liveText) ||
+        normalizeText(state.finalText);
+      if (!archivedText) {
+        return state;
+      }
+
+      const nextFinalText = mergeDistinctTranscription(
+        state.finalText,
+        archivedText,
+      );
+      if (nextFinalText === state.finalText && !state.liveText) {
+        return state;
+      }
+
+      return {
+        liveText: "",
+        finalText: nextFinalText,
       };
     }
     default:
@@ -117,4 +154,4 @@ export const reduceAudioTranscriptionState = (
 };
 
 export const getMergedAudioTranscription = (state: AudioTranscriptionState) =>
-  normalizeText(state.finalText) || normalizeText(state.liveText);
+  mergeDistinctTranscription(state.finalText, state.liveText);

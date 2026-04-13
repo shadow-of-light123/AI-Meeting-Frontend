@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   createInitialAudioTranscriptionState,
   getMergedAudioTranscription,
@@ -22,7 +29,9 @@ const resolveAudioUserId = (currentUser: UserRespDTO | null) => {
   return normalizedUsername || normalizedUserId || null;
 };
 
-export function useAudioTranscriptionController(currentUser: UserRespDTO | null) {
+export function useAudioTranscriptionController(
+  currentUser: UserRespDTO | null,
+) {
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcriptionState, dispatchTranscription] = useReducer(
@@ -137,11 +146,12 @@ export function useAudioTranscriptionController(currentUser: UserRespDTO | null)
   return useMemo(
     () => ({
       isRecording,
-      currentSentence: transcriptionState.finalText
-        ? ""
-        : transcriptionState.liveText,
+      currentSentence: transcriptionState.liveText,
       historySentences: transcriptionState.finalText
-        ? [transcriptionState.finalText]
+        ? transcriptionState.finalText
+            .split(/\n\n+/)
+            .map((sentence) => sentence.trim())
+            .filter(Boolean)
         : [],
       transcription: getMergedAudioTranscription(transcriptionState),
       error,

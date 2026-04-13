@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowDownToLine,
   ChevronDown,
@@ -48,6 +50,35 @@ export function InterviewSketchpadSheetView({
   saveHint,
   actions,
 }: InterviewSketchpadSheetViewProps) {
+  const [isTranscriptionUpdated, setIsTranscriptionUpdated] = useState(false);
+  const previousTranscriptionRef = useRef(displayedTranscriptionBuffer);
+
+  useEffect(() => {
+    if (displayedTranscriptionBuffer === previousTranscriptionRef.current) {
+      return;
+    }
+
+    previousTranscriptionRef.current = displayedTranscriptionBuffer;
+    const normalizedTranscription = displayedTranscriptionBuffer.trim();
+
+    const startTimerId = window.setTimeout(() => {
+      setIsTranscriptionUpdated(normalizedTranscription.length > 0);
+    }, 0);
+    const finishTimerId =
+      normalizedTranscription.length > 0
+        ? window.setTimeout(() => {
+            setIsTranscriptionUpdated(false);
+          }, 220)
+        : null;
+
+    return () => {
+      window.clearTimeout(startTimerId);
+      if (finishTimerId) {
+        window.clearTimeout(finishTimerId);
+      }
+    };
+  }, [displayedTranscriptionBuffer]);
+
   const transcriptionHint = isRecording
     ? "正在实时转写，你可以持续口述思路。"
     : hasTranscriptionBuffer
@@ -111,14 +142,25 @@ export function InterviewSketchpadSheetView({
                 </Button>
               </div>
 
-              {!question.isCollapsed ? (
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-                  {question.isFinished
-                    ? "本场面试已结束，你仍然可以继续查看并整理当前会话的构思内容。"
-                    : question.questionContent ||
-                      "当前还没有同步到题目内容，开始面试后这里会显示最新问题。"}
-                </p>
-              ) : null}
+              <AnimatePresence initial={false}>
+                {!question.isCollapsed ? (
+                  <motion.div
+                    key="question-content"
+                    initial={{ height: 0, opacity: 0, y: -6 }}
+                    animate={{ height: "auto", opacity: 1, y: 0 }}
+                    exit={{ height: 0, opacity: 0, y: -4 }}
+                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <p className="mt-3 text-sm leading-7 text-slate-600">
+                      {question.isFinished
+                        ? "本场面试已结束，你仍然可以继续查看并整理当前会话的构思内容。"
+                        : question.questionContent ||
+                          "当前还没有同步到题目内容，开始面试后这里会显示最新问题。"}
+                    </p>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -192,6 +234,7 @@ export function InterviewSketchpadSheetView({
                   className={cn(
                     "relative mt-4 overflow-hidden rounded-2xl",
                     isRecording && "sketchpad-transcription-live",
+                    isTranscriptionUpdated && "sketchpad-transcription-updated",
                   )}
                 >
                   <Textarea

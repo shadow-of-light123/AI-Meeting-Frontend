@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ROUTES } from "@/lib/constants";
+import { buildReportSearch } from "@/lib/interviewReportRoute";
 import { CHAT_MESSAGE_VARIANT } from "@/lib/chat";
 import {
   buildInterviewProgressPatch,
@@ -115,6 +116,7 @@ export function useInterviewSessionFlow(user: InterviewFlowUser) {
         progressPatch.currentQuestionContent,
         progressPatch.currentQuestionNumber,
         progressPatch.isCurrentQuestionFollowUp,
+        progressPatch.currentFollowUpCount,
         options,
       );
     },
@@ -167,6 +169,13 @@ export function useInterviewSessionFlow(user: InterviewFlowUser) {
     if (!nextInput) {
       return;
     }
+    const activeQuestionNumber = currentQuestionNumber?.trim();
+    if (!activeQuestionNumber) {
+      const message = "当前题号缺失，请先等待题目加载完成后再提交。";
+      setInterviewError(message);
+      appendErrorMessage(message);
+      return;
+    }
 
     setInterviewError(null);
     appendUserMessage(nextInput);
@@ -182,7 +191,7 @@ export function useInterviewSessionFlow(user: InterviewFlowUser) {
 
       const response = await interviewService.answerInterviewQuestion({
         sessionId: activeSessionId,
-        questionNumber: currentQuestionNumber || undefined,
+        questionNumber: activeQuestionNumber,
         answerContent: nextInput,
         requestId: generateRequestId(),
       });
@@ -215,6 +224,7 @@ export function useInterviewSessionFlow(user: InterviewFlowUser) {
           progressPatch.currentQuestionContent,
           progressPatch.currentQuestionNumber,
           progressPatch.isCurrentQuestionFollowUp,
+          progressPatch.currentFollowUpCount,
         );
       }
 
@@ -270,9 +280,12 @@ export function useInterviewSessionFlow(user: InterviewFlowUser) {
       clearStoredSession();
       resetProgressState();
       resetAutoSaveAttempt();
-      navigate(ROUTES.interviewReport, {
-        state: reportSessionId ? { sessionId: reportSessionId } : undefined,
-      });
+      navigate(
+        `${ROUTES.interviewReport}${buildReportSearch(reportSessionId)}`,
+        {
+          state: reportSessionId ? { sessionId: reportSessionId } : undefined,
+        },
+      );
       setIsEndingInterview(false);
     }
   }, [

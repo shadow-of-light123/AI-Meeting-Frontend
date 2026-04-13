@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import type { ReviewFeedback } from "@/components/interview/report/types";
@@ -37,12 +38,19 @@ function FeedbackSection({
       {items.length > 0 ? (
         <div className="space-y-2">
           {items.map((item, index) => (
-            <div
+            <motion.div
               key={`${title}-${index}-${item}`}
               className={`rounded-xl px-3 py-2 text-sm leading-6 ${toneClass}`}
+              initial={{ opacity: 0, y: 10, filter: "blur(3px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              transition={{
+                duration: 0.24,
+                delay: index * 0.06,
+                ease: [0.22, 1, 0.36, 1],
+              }}
             >
               {item}
-            </div>
+            </motion.div>
           ))}
         </div>
       ) : (
@@ -87,14 +95,20 @@ export default function InterviewConclusionCard({
 
       {!isRecordLoading && !recordError && (
         <div className="space-y-5">
-          <div className="rounded-2xl bg-slate-900 px-4 py-4 text-slate-50">
+          <motion.div
+            className="rounded-2xl bg-slate-900 px-4 py-4 text-slate-50"
+            initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          >
             <p className="text-xs font-medium tracking-[0.18em] text-slate-300">
               总体评价
             </p>
             <p className="mt-2 text-sm leading-6">
-              {reviewFeedback.overallComment ?? "本次面试已完成，报告数据已同步。"}
+              {reviewFeedback.overallComment ??
+                "本次面试已完成，报告数据已同步。"}
             </p>
-          </div>
+          </motion.div>
 
           <FeedbackSection
             title="亮点总结"

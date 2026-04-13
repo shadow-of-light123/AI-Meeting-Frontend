@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import type { RadarPoint } from "@/components/interview/report/types";
 
 type InterviewRadarChartProps = {
@@ -48,11 +49,14 @@ export default function InterviewRadarChart({
 
   return (
     <div className="relative w-fit mx-auto">
-      <svg
+      <motion.svg
         width={size}
         height={size}
         className="mx-auto"
         onMouseLeave={() => setHovered(null)}
+        initial={{ opacity: 0, scale: 0.94, filter: "blur(3px)" }}
+        animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       >
         {levels.map((level) => (
           <polygon
@@ -72,20 +76,29 @@ export default function InterviewRadarChart({
             stroke="#e2e8f0"
           />
         ))}
-        <polygon
+        <motion.polygon
           points={polygon}
           fill="#6366f1"
           fillOpacity={hovered ? "0.28" : "0.18"}
           stroke="#6366f1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.35, delay: 0.08, ease: "easeOut" }}
         />
         {hoverPoints.map((item) => (
           <g key={item.label}>
-            <circle
+            <motion.circle
               cx={item.x}
               cy={item.y}
               r={5}
               fill="#6366f1"
               opacity={hovered?.label === item.label ? 0.9 : 0.6}
+              initial={{ opacity: 0, scale: 0.2 }}
+              animate={{
+                opacity: hovered?.label === item.label ? 0.9 : 0.6,
+                scale: 1,
+              }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
             />
             <circle
               cx={item.x}
@@ -124,15 +137,21 @@ export default function InterviewRadarChart({
             {item.label}
           </text>
         ))}
-      </svg>
-      {hovered && (
-        <div
-          className="absolute -translate-x-1/2 -translate-y-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm"
-          style={{ left: hovered.x, top: hovered.y - 10 }}
-        >
-          {hovered.label}：{hovered.value}
-        </div>
-      )}
+      </motion.svg>
+      <AnimatePresence>
+        {hovered ? (
+          <motion.div
+            className="absolute -translate-x-1/2 -translate-y-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm"
+            style={{ left: hovered.x, top: hovered.y - 10 }}
+            initial={{ opacity: 0, y: 6, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.96 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+            {hovered.label}：{hovered.value}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

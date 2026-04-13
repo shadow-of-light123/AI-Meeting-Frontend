@@ -105,9 +105,15 @@ export interface InterviewRadarMetric {
 }
 
 export interface InterviewQaReview {
+  seq?: number | null;
+  questionNumber?: string | null;
   question?: string | null;
   answer?: string | null;
   score?: number | string | null;
+  feedback?: string | null;
+  isFollowUp?: boolean | null;
+  followUpNeeded?: boolean | null;
+  followUpCount?: number | string | null;
 }
 
 export interface InterviewRadarChartResult {
@@ -169,7 +175,7 @@ export interface InterviewSessionRestoreResult {
 
 export interface AnswerInterviewQuestionParams {
   sessionId: string;
-  questionNumber?: string;
+  questionNumber: string;
   answerContent?: string;
   audioFile?: File;
   requestId?: string;
@@ -200,7 +206,7 @@ export interface AnswerInterviewQuestionResult {
 }
 
 type AnswerInterviewQuestionJsonPayload = {
-  questionNumber?: string;
+  questionNumber: string;
   answerContent?: string;
   requestId?: string;
 };
@@ -372,7 +378,7 @@ const normalizeExtractInterviewQuestions = (
   };
 };
 
-const normalizeInterviewAnswer = (
+export const normalizeInterviewAnswer = (
   payload: AnswerInterviewQuestionResult,
 ): AnswerInterviewQuestionResult => {
   const source = toRecord(payload);
@@ -380,14 +386,10 @@ const normalizeInterviewAnswer = (
     toBooleanValue(pickFirst(source, ["isSuccess", "is_success", "success"])) ??
     true;
   const isFollowUp =
-    toBooleanValue(
-      pickFirst(source, [
-        "isFollowUp",
-        "is_follow_up",
-        "followUpNeeded",
-        "follow_up_needed",
-      ]),
-    ) ?? false;
+    toBooleanValue(pickFirst(source, ["isFollowUp", "is_follow_up"])) ?? false;
+  const followUpNeeded =
+    toBooleanValue(pickFirst(source, ["followUpNeeded", "follow_up_needed"])) ??
+    payload.followUpNeeded;
   const finished =
     toBooleanValue(
       pickFirst(source, [
@@ -443,7 +445,7 @@ const normalizeInterviewAnswer = (
         pickFirst(source, ["nextQuestionNumber", "next_question_number"]),
       ) ?? payload.nextQuestionNumber,
     isFollowUp,
-    followUpNeeded: isFollowUp,
+    followUpNeeded,
     followUpCount:
       toNumberValue(pickFirst(source, ["followUpCount", "follow_up_count"])) ??
       payload.followUpCount,
@@ -659,11 +661,23 @@ const postWithPathFallback = async <T, D = unknown>(
   }
 };
 
+const normalizeRequiredQuestionNumber = (questionNumber: string): string => {
+  const normalized = questionNumber?.trim();
+  if (normalized) {
+    return normalized;
+  }
+  throw new AppError(
+    ErrorCode.CLIENT_VALIDATION_ERROR,
+    "questionNumber is required for interview answer submission",
+  );
+};
+
 const buildAnswerFormData = (params: AnswerInterviewQuestionParams) => {
   const formData = new FormData();
-  if (params.questionNumber) {
-    formData.append("questionNumber", params.questionNumber);
-  }
+  formData.append(
+    "questionNumber",
+    normalizeRequiredQuestionNumber(params.questionNumber),
+  );
   if (params.answerContent) {
     formData.append("answerContent", params.answerContent);
   }
@@ -806,9 +820,12 @@ export const interviewService = {
     return normalizeExtractInterviewQuestions(response);
   },
   answerInterviewQuestion: async (params: AnswerInterviewQuestionParams) => {
+    const questionNumber = normalizeRequiredQuestionNumber(
+      params.questionNumber,
+    );
     if (!params.audioFile) {
       const payload: AnswerInterviewQuestionJsonPayload = {
-        questionNumber: params.questionNumber,
+        questionNumber,
         answerContent: params.answerContent,
         requestId: params.requestId,
       };

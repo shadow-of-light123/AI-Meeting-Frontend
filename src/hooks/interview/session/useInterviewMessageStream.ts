@@ -30,48 +30,59 @@ export function useInterviewMessageStream() {
     timerId: number;
   } | null>(null);
 
-  const stopThinkingIndicator = useCallback((options?: { remove?: boolean }) => {
-    const activeThinking = thinkingMessageRef.current;
-    if (!activeThinking) {
-      return;
-    }
-
-    window.clearInterval(activeThinking.timerId);
-    thinkingMessageRef.current = null;
-
-    setMessages((prev) => {
-      if (options?.remove !== false) {
-        return prev.filter((message) => message.id !== activeThinking.messageId);
+  const stopThinkingIndicator = useCallback(
+    (options?: { remove?: boolean }) => {
+      const activeThinking = thinkingMessageRef.current;
+      if (!activeThinking) {
+        return;
       }
-      return prev.map((message) =>
-        message.id === activeThinking.messageId
-          ? {
-              ...message,
-              content:
-                message.content ||
-                THINKING_PROGRESS_STAGES[message.activeProgressStep ?? 0],
-              status: CHAT_MESSAGE_STATUS.done,
-            }
-          : message,
-      );
-    });
-  }, []);
+
+      window.clearInterval(activeThinking.timerId);
+      thinkingMessageRef.current = null;
+
+      setMessages((prev) => {
+        if (options?.remove !== false) {
+          return prev.filter(
+            (message) => message.id !== activeThinking.messageId,
+          );
+        }
+        return prev.map((message) =>
+          message.id === activeThinking.messageId
+            ? {
+                ...message,
+                content:
+                  message.content ||
+                  THINKING_PROGRESS_STAGES[message.activeProgressStep ?? 0],
+                status: CHAT_MESSAGE_STATUS.done,
+              }
+            : message,
+        );
+      });
+    },
+    [],
+  );
 
   const startThinkingIndicator = useCallback(() => {
     stopThinkingIndicator();
 
-    const thinkingMessage = createAssistantMessage(THINKING_PROGRESS_STAGES[0], {
-      status: CHAT_MESSAGE_STATUS.streaming,
-      variant: CHAT_MESSAGE_VARIANT.progress,
-      progressSteps: [...THINKING_PROGRESS_STAGES],
-      activeProgressStep: 0,
-    });
+    const thinkingMessage = createAssistantMessage(
+      THINKING_PROGRESS_STAGES[0],
+      {
+        status: CHAT_MESSAGE_STATUS.streaming,
+        variant: CHAT_MESSAGE_VARIANT.progress,
+        progressSteps: [...THINKING_PROGRESS_STAGES],
+        activeProgressStep: 0,
+      },
+    );
 
     setMessages((prev) => [...prev, thinkingMessage]);
 
     let activeStep = 0;
     const timerId = window.setInterval(() => {
-      activeStep = Math.min(activeStep + 1, THINKING_PROGRESS_STAGES.length - 1);
+      activeStep = Math.min(
+        activeStep + 1,
+        THINKING_PROGRESS_STAGES.length - 1,
+      );
 
       setMessages((prev) =>
         prev.map((message) =>
@@ -184,20 +195,26 @@ export function useInterviewMessageStream() {
       nextQuestion: string,
       nextQuestionNumber: string | null | undefined,
       isFollowUp: boolean,
+      followUpCount?: number,
       options?: { appendMessage?: boolean },
     ) => {
       if (options?.appendMessage === false) {
         return;
       }
 
-      const questionKey = `${nextQuestionNumber || ""}::${nextQuestion}`;
+      const displayText =
+        isFollowUp && typeof followUpCount === "number" && followUpCount > 0
+          ? `【追问第 ${followUpCount} 轮】${nextQuestion}`
+          : nextQuestion;
+      const questionKey = `${nextQuestionNumber || ""}::${nextQuestion}::${followUpCount ?? 0}`;
       if (lastDisplayedQuestionRef.current === questionKey) {
         return;
       }
 
       lastDisplayedQuestionRef.current = questionKey;
-      await appendAssistantMessage(nextQuestion, {
+      await appendAssistantMessage(displayText, {
         fakeStream: true,
+        variant: isFollowUp ? CHAT_MESSAGE_VARIANT.followUp : undefined,
         streamStep: isFollowUp ? FOLLOW_UP_STREAM_STEP : FEEDBACK_STREAM_STEP,
         streamDelayMs: isFollowUp
           ? FOLLOW_UP_STREAM_DELAY_MS

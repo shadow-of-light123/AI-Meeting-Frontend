@@ -38,7 +38,7 @@ export default function SidebarInterviewList({
     <>
       {records.map((record) => {
         const isActive =
-          activePathname === ROUTES.interviewReport &&
+          activePathname.startsWith(ROUTES.interviewReport) &&
           activeSessionId === record.sessionId;
 
         return (

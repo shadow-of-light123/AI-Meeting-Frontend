@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import type { ReviewFeedback } from "@/components/interview/report/types";
 
@@ -46,19 +47,26 @@ export default function InterviewNextActionsCard({
           </div>
         )}
 
-        {!isRecordLoading && !recordError && nextActions.length > 0 ? (
-          nextActions.map((item, index) => (
-            <div
-              key={`${index}-${item}`}
-              className="flex gap-3 rounded-2xl bg-slate-50 px-4 py-4"
-            >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
-                {index + 1}
-              </div>
-              <p className="text-sm leading-6 text-slate-700">{item}</p>
-            </div>
-          ))
-        ) : null}
+        {!isRecordLoading && !recordError && nextActions.length > 0
+          ? nextActions.map((item, index) => (
+              <motion.div
+                key={`${index}-${item}`}
+                className="flex gap-3 rounded-2xl bg-slate-50 px-4 py-4"
+                initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                transition={{
+                  duration: 0.28,
+                  delay: index * 0.07,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+                  {index + 1}
+                </div>
+                <p className="text-sm leading-6 text-slate-700">{item}</p>
+              </motion.div>
+            ))
+          : null}
 
         {!isRecordLoading && !recordError && nextActions.length === 0 && (
           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-400">

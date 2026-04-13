@@ -45,6 +45,7 @@ export type InterviewMessageActions = {
     nextQuestion: string,
     nextQuestionNumber: string | null | undefined,
     isFollowUp: boolean,
+    followUpCount?: number,
     options?: { appendMessage?: boolean },
   ) => Promise<void>;
   appendSystemMessage: (content: string, status?: ChatMessageStatus) => void;
@@ -80,7 +81,8 @@ export const buildInterviewProgressPatch = (
     response.nextQuestion?.trim() || response.questionContent?.trim() || null;
 
   return {
-    currentQuestionNumber: response.nextQuestionNumber || null,
+    currentQuestionNumber:
+      response.nextQuestionNumber || response.questionNumber || null,
     currentQuestionContent: isInterviewFinished ? null : nextQuestion,
     isCurrentQuestionFollowUp: isInterviewFinished
       ? false

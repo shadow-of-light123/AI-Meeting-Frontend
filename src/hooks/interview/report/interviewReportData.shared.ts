@@ -43,6 +43,17 @@ const toNumber = (value: unknown): number | null => {
   return null;
 };
 
+const toBoolean = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "y"].includes(normalized)) return true;
+    if (["0", "false", "no", "n"].includes(normalized)) return false;
+  }
+  return null;
+};
+
 const normalizeScore = (value: unknown): number | null => {
   const parsed = toNumber(value);
   if (parsed === null) return null;
@@ -183,6 +194,11 @@ const parseQaReview = (value: unknown): QaReview | null => {
   const payload = toRecord(value);
   if (!payload) return null;
 
+  const seq = toNumber(payload.seq);
+  const questionNumber = pickFirstString(
+    payload.questionNumber,
+    payload.question_number,
+  );
   const question = pickFirstString(
     payload.question,
     payload.q,
@@ -196,12 +212,32 @@ const parseQaReview = (value: unknown): QaReview | null => {
     payload.response,
   );
   const score = pickFirstNumber(payload.score, payload.interviewScore);
+  const feedback = pickFirstString(
+    payload.feedback,
+    payload.scoreComment,
+    payload.score_comment,
+    payload.comment,
+  );
+  const isFollowUp = toBoolean(payload.isFollowUp ?? payload.is_follow_up);
+  const followUpNeeded = toBoolean(
+    payload.followUpNeeded ?? payload.follow_up_needed,
+  );
+  const followUpCount = pickFirstNumber(
+    payload.followUpCount,
+    payload.follow_up_count,
+  );
 
   if (!question && !answer) return null;
   return {
     question: question || "题目内容缺失",
     answer: answer || "回答内容缺失",
     score,
+    ...(feedback ? { feedback } : {}),
+    ...(seq !== null ? { seq } : {}),
+    ...(questionNumber ? { questionNumber } : {}),
+    ...(isFollowUp !== null ? { isFollowUp } : {}),
+    ...(followUpNeeded !== null ? { followUpNeeded } : {}),
+    ...(followUpCount !== null ? { followUpCount } : {}),
   };
 };
 
@@ -266,7 +302,7 @@ const mergeQaReviews = (...groups: QaReview[][]) => {
 
   groups.forEach((group) => {
     group.forEach((item) => {
-      const key = `${item.question}__${item.answer}`;
+      const key = `${item.questionNumber || ""}__${item.question}__${item.answer}__${item.followUpCount ?? ""}`;
       if (seen.has(key)) return;
       seen.add(key);
       merged.push(item);
@@ -276,9 +312,7 @@ const mergeQaReviews = (...groups: QaReview[][]) => {
   return merged;
 };
 
-const normalizeReviewFeedback = (
-  value: unknown,
-): ReviewFeedback | null => {
+const normalizeReviewFeedback = (value: unknown): ReviewFeedback | null => {
   const payload = toRecord(value);
   if (!payload) return null;
 
@@ -357,7 +391,8 @@ export async function fetchInterviewReportQueryData(
   }
 
   try {
-    const record = await interviewService.getInterviewRecordBySessionId(sessionId);
+    const record =
+      await interviewService.getInterviewRecordBySessionId(sessionId);
     return { radar, record };
   } catch {
     try {
@@ -370,7 +405,8 @@ export async function fetchInterviewReportQueryData(
       await interviewService.saveInterviewRecordFromRedis(sessionId);
     }
 
-    const record = await interviewService.getInterviewRecordBySessionId(sessionId);
+    const record =
+      await interviewService.getInterviewRecordBySessionId(sessionId);
     return { radar, record };
   }
 }

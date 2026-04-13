@@ -10,6 +10,7 @@ export const CHAT_MESSAGE_STATUS = {
 export const CHAT_MESSAGE_VARIANT = {
   default: "default",
   feedback: "feedback",
+  followUp: "followUp",
   system: "system",
   progress: "progress",
 } as const;

@@ -4,9 +4,15 @@ export type RadarPoint = {
 };
 
 export type QaReview = {
+  seq?: number | null;
+  questionNumber?: string | null;
   question: string;
   answer: string;
   score: number | null;
+  feedback?: string | null;
+  isFollowUp?: boolean;
+  followUpNeeded?: boolean;
+  followUpCount?: number | null;
 };
 
 export type ReviewFeedback = {

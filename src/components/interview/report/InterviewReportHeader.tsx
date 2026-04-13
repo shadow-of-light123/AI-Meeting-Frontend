@@ -10,10 +10,13 @@ export default function InterviewReportHeader() {
         <p className="text-sm text-slate-500">综合评估 · 结果可用于后续训练</p>
       </div>
       <div className="flex gap-2">
-        <Button asChild variant="outline" className="rounded-full">
+        <Button
+          asChild
+          variant="outline"
+          className="rounded-full border-slate-900 bg-slate-900 text-white hover:bg-slate-800 hover:text-white"
+        >
           <Link to={ROUTES.interviewIntro}>重新面试</Link>
         </Button>
-        <Button className="rounded-full">下载报告</Button>
       </div>
     </div>
   );

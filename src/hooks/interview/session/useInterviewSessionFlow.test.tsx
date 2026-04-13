@@ -19,9 +19,10 @@ const answerInterviewQuestionMock = vi.fn();
 const finishInterviewSessionMock = vi.fn();
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>(
-    "react-router-dom",
-  );
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -174,6 +175,90 @@ describe("useInterviewSessionFlow", () => {
     expect(result.current.interviewError).toBeNull();
   });
 
+  it("shows follow-up message marker when backend returns a follow-up question", async () => {
+    useParamsMock.mockReturnValue({
+      sessionId: "session-1",
+    });
+    answerInterviewQuestionMock.mockResolvedValue({
+      isSuccess: true,
+      feedback: "请补充细节",
+      nextQuestion: "你刚提到缓存一致性，具体如何保证？",
+      nextQuestionNumber: "1-F1",
+      isFollowUp: true,
+      followUpCount: 1,
+      finished: false,
+    });
+
+    const { result } = renderSessionFlow();
+
+    await waitFor(() => {
+      expect(
+        result.current.messages.some(
+          (message) => message.content === "Initial question",
+        ),
+      ).toBe(true);
+    });
+
+    await act(async () => {
+      result.current.setInput("我会先讲设计目标");
+    });
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    expect(
+      result.current.messages.some(
+        (message) =>
+          message.content.includes("【追问第 1 轮】") &&
+          message.content.includes("具体如何保证"),
+      ),
+    ).toBe(true);
+    expect(result.current.isCurrentQuestionFollowUp).toBe(true);
+    expect(result.current.currentFollowUpCount).toBe(1);
+  });
+
+  it("blocks submission when current question number is missing", async () => {
+    useParamsMock.mockReturnValue({
+      sessionId: "session-1",
+    });
+    getCurrentQuestionMock.mockResolvedValue({
+      isSuccess: true,
+      nextQuestion: "Question without number",
+      nextQuestionNumber: null,
+      finished: false,
+    });
+
+    const { result } = renderSessionFlow();
+
+    await waitFor(() => {
+      expect(
+        result.current.messages.some(
+          (message) => message.content === "Question without number",
+        ),
+      ).toBe(true);
+    });
+
+    await act(async () => {
+      result.current.setInput("answer without question number");
+    });
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    expect(answerInterviewQuestionMock).not.toHaveBeenCalled();
+    expect(result.current.interviewError).toBe(
+      "当前题号缺失，请先等待题目加载完成后再提交。",
+    );
+    expect(
+      result.current.messages.some(
+        (message) =>
+          message.content === "当前题号缺失，请先等待题目加载完成后再提交。",
+      ),
+    ).toBe(true);
+  });
+
   it("stops the thinking indicator and appends an error message when answer submission fails", async () => {
     useParamsMock.mockReturnValue({
       sessionId: "session-1",
@@ -246,8 +331,8 @@ describe("useInterviewSessionFlow", () => {
     await waitFor(() => {
       expect(finishInterviewSessionMock).toHaveBeenCalledTimes(1);
       expect(
-        result.current.messages.some((message) =>
-          message.content === AUTO_SAVE_SUCCESS_TEXT,
+        result.current.messages.some(
+          (message) => message.content === AUTO_SAVE_SUCCESS_TEXT,
         ),
       ).toBe(true);
     });
@@ -283,10 +368,13 @@ describe("useInterviewSessionFlow", () => {
     expect(finishInterviewSessionMock).toHaveBeenCalledWith("session-1");
     expect(storageState.setInterviewerSessionId).toHaveBeenCalledWith(null);
     expect(storageState.clearStoredSession).toHaveBeenCalledTimes(1);
-    expect(navigateMock).toHaveBeenCalledWith(ROUTES.interviewReport, {
-      state: {
-        sessionId: "session-1",
+    expect(navigateMock).toHaveBeenCalledWith(
+      `${ROUTES.interviewReport}?sessionId=session-1`,
+      {
+        state: {
+          sessionId: "session-1",
+        },
       },
-    });
+    );
   });
 });

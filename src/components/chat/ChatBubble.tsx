@@ -46,6 +46,8 @@ export default function ChatBubble({
   const messageVariant = variant || CHAT_MESSAGE_VARIANT.default;
   const isFeedback =
     !isUser && messageVariant === CHAT_MESSAGE_VARIANT.feedback;
+  const isFollowUp =
+    !isUser && messageVariant === CHAT_MESSAGE_VARIANT.followUp;
   const isSystem = !isUser && messageVariant === CHAT_MESSAGE_VARIANT.system;
   const isProgress =
     !isUser && messageVariant === CHAT_MESSAGE_VARIANT.progress;
@@ -113,13 +115,19 @@ export default function ChatBubble({
                   isUser
                     ? "bg-muted/50 text-foreground border-0"
                     : "bg-muted text-foreground border",
-                  isFeedback && "border-emerald-200 bg-emerald-50/80 shadow-sm",
+                  isFeedback && "border-emerald-300 bg-emerald-50 shadow-sm",
+                  isFollowUp && "border-amber-200 bg-amber-50/80 shadow-sm",
                   isSystem && "border-sky-200 bg-sky-50/80 text-slate-700",
                 )}
               >
                 {isFeedback ? (
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
                     Score Feedback
+                  </p>
+                ) : null}
+                {isFollowUp ? (
+                  <p className="mb-2 text-[11px] font-semibold tracking-wide text-amber-700">
+                    追问问题
                   </p>
                 ) : null}
                 <ChatMessageContent

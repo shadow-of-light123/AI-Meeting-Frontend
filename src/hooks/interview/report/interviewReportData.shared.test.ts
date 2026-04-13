@@ -134,4 +134,54 @@ describe("buildInterviewReportViewModel", () => {
       nextActions: ["下一次练习时优先加强 STAR 表达"],
     });
   });
+
+  it("parses follow-up metadata from playback items", () => {
+    const viewModel = buildInterviewReportViewModel(
+      {
+        id: 4,
+        userId: 1,
+        sessionId: "session-4",
+        playbackItems: [
+          {
+            questionNumber: "1",
+            question: "介绍一次性能优化实践",
+            answer: "先定位瓶颈，再做缓存和SQL优化",
+            score: 86,
+            isFollowUp: false,
+          },
+          {
+            questionNumber: "1-F1",
+            question: "具体说下缓存一致性怎么做？",
+            answer: "旁路缓存+延时双删+重试补偿",
+            score: 80,
+            feedback: "回答方向正确，但缺少异常场景处理细节。",
+            isFollowUp: true,
+            followUpCount: 1,
+            followUpNeeded: true,
+          },
+        ],
+      },
+      null,
+    );
+
+    expect(viewModel.qaReviews).toEqual([
+      {
+        questionNumber: "1",
+        question: "介绍一次性能优化实践",
+        answer: "先定位瓶颈，再做缓存和SQL优化",
+        score: 86,
+        isFollowUp: false,
+      },
+      {
+        questionNumber: "1-F1",
+        question: "具体说下缓存一致性怎么做？",
+        answer: "旁路缓存+延时双删+重试补偿",
+        score: 80,
+        feedback: "回答方向正确，但缺少异常场景处理细节。",
+        isFollowUp: true,
+        followUpCount: 1,
+        followUpNeeded: true,
+      },
+    ]);
+  });
 });

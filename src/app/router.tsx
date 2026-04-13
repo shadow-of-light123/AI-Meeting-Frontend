@@ -21,6 +21,9 @@ const InterviewPage = lazy(() => import("@/pages/interview/InterviewPage"));
 const InterviewReportPage = lazy(
   () => import("@/pages/interview/InterviewReportPage"),
 );
+const InterviewReportDetailPage = lazy(
+  () => import("@/pages/interview/InterviewReportDetailPage"),
+);
 
 function RouteLoadingScreen() {
   return (
@@ -65,6 +68,10 @@ export const appRoutes: RouteObject[] = [
           {
             path: ROUTES.interviewReport,
             element: withRouteSuspense(<InterviewReportPage />),
+          },
+          {
+            path: ROUTES.interviewReportDetail,
+            element: withRouteSuspense(<InterviewReportDetailPage />),
           },
           {
             path: `${ROUTES.chat}/:sessionId?`,
