@@ -4,9 +4,11 @@ import { getAuthToken } from "@/lib/authToken";
 import { AppError, ErrorCode } from "@/lib/errors";
 import {
   assertRequestAuthorized,
+  buildRequestPolicyKey,
   buildApiUrl,
   mapAxiosErrorToAppError,
   requiresAuthTokenForRequest,
+  resolveRequestPolicy,
   unwrapResponseData,
 } from "@/lib/request";
 
@@ -127,5 +129,46 @@ describe("request utilities", () => {
       __CANCEL__: true,
     } as unknown as AxiosError;
     expect(mapAxiosErrorToAppError(cancelError).code).toBe(ErrorCode.ABORTED);
+  });
+
+  it("resolveRequestPolicy should default to GET join and POST off", () => {
+    expect(resolveRequestPolicy("GET")).toEqual({
+      dedupe: "join",
+      debounceMs: 0,
+      key: undefined,
+    });
+    expect(resolveRequestPolicy("POST")).toEqual({
+      dedupe: "off",
+      debounceMs: 0,
+      key: undefined,
+    });
+  });
+
+  it("buildRequestPolicyKey should be stable for same semantic payload", () => {
+    const keyA = buildRequestPolicyKey({
+      method: "post",
+      url: "/xunzhi/v1/interview/sessions",
+      params: {
+        page: 1,
+        size: 20,
+      },
+      data: {
+        b: 2,
+        a: 1,
+      },
+    });
+    const keyB = buildRequestPolicyKey({
+      method: "POST",
+      url: "/xunzhi/v1/interview/sessions",
+      params: {
+        size: 20,
+        page: 1,
+      },
+      data: {
+        a: 1,
+        b: 2,
+      },
+    });
+    expect(keyA).toBe(keyB);
   });
 });

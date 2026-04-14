@@ -823,6 +823,11 @@ export const interviewService = {
     const questionNumber = normalizeRequiredQuestionNumber(
       params.questionNumber,
     );
+    const answerRequestPolicy = {
+      dedupe: "reject" as const,
+      debounceMs: 250,
+      key: `interview-answer:${params.sessionId}:${questionNumber}`,
+    };
     if (!params.audioFile) {
       const payload: AnswerInterviewQuestionJsonPayload = {
         questionNumber,
@@ -838,6 +843,7 @@ export const interviewService = {
           payload,
           {
             timeout: INTERVIEW_LONG_TIMEOUT_MS,
+            requestPolicy: answerRequestPolicy,
           },
         );
         return normalizeInterviewAnswer(response);
@@ -858,6 +864,7 @@ export const interviewService = {
       formData,
       {
         timeout: INTERVIEW_LONG_TIMEOUT_MS,
+        requestPolicy: answerRequestPolicy,
         headers: {
           "Content-Type": "multipart/form-data",
         },

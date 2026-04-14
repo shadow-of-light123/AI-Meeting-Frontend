@@ -23,23 +23,39 @@ export interface BaseResponse<T = unknown> {
 
 export type ApiResponse<T = unknown> = BaseResponse<T>;
 
+export type RequestDedupeStrategy =
+  | "off"
+  | "join"
+  | "cancel-previous"
+  | "reject";
+
+export type RequestPolicy = {
+  key?: string;
+  dedupe?: RequestDedupeStrategy;
+  debounceMs?: number;
+};
+
+export type AppRequestConfig<D = unknown> = AxiosRequestConfig<D> & {
+  requestPolicy?: RequestPolicy;
+};
+
 export interface HttpClient {
-  get<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
-  delete<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
+  get<T>(url: string, config?: AppRequestConfig): Promise<T>;
+  delete<T>(url: string, config?: AppRequestConfig): Promise<T>;
   post<T, D = unknown>(
     url: string,
     data?: D,
-    config?: AxiosRequestConfig<D>,
+    config?: AppRequestConfig<D>,
   ): Promise<T>;
   put<T, D = unknown>(
     url: string,
     data?: D,
-    config?: AxiosRequestConfig<D>,
+    config?: AppRequestConfig<D>,
   ): Promise<T>;
   patch<T, D = unknown>(
     url: string,
     data?: D,
-    config?: AxiosRequestConfig<D>,
+    config?: AppRequestConfig<D>,
   ): Promise<T>;
 }
 
@@ -229,6 +245,253 @@ export const mapAxiosErrorToAppError = (error: AxiosError): AppError => {
   );
 };
 
+const stableSerialize = (
+  value: unknown,
+  seen = new WeakSet<object>(),
+): string => {
+  if (value === null || value === undefined) {
+    return String(value);
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return JSON.stringify(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (value instanceof URLSearchParams) {
+    return value.toString();
+  }
+  if (typeof FormData !== "undefined" && value instanceof FormData) {
+    return "[form-data]";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item, seen)).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    if (seen.has(value as object)) {
+      return "[circular]";
+    }
+    seen.add(value as object);
+    const record = value as Record<string, unknown>;
+    const serialized = Object.keys(record)
+      .sort()
+      .map((key) => `${key}:${stableSerialize(record[key], seen)}`)
+      .join(",");
+    seen.delete(value as object);
+    return `{${serialized}}`;
+  }
+  return String(value);
+};
+
+export const buildRequestPolicyKey = (args: {
+  method: string;
+  url: string;
+  params?: unknown;
+  data?: unknown;
+  explicitKey?: string;
+}) => {
+  const normalizedExplicitKey = args.explicitKey?.trim();
+  if (normalizedExplicitKey) {
+    return normalizedExplicitKey;
+  }
+  const normalizedMethod = args.method.toUpperCase();
+  const normalizedPath = normalizeRequestPath(args.url) || args.url;
+  const serializedParams = stableSerialize(args.params);
+  const serializedData = stableSerialize(args.data);
+  return `${normalizedMethod}::${normalizedPath}::params=${serializedParams}::data=${serializedData}`;
+};
+
+export const resolveRequestPolicy = (
+  method: string,
+  requestPolicy?: RequestPolicy,
+) => {
+  const normalizedMethod = method.trim().toUpperCase();
+  const dedupe: RequestDedupeStrategy =
+    requestPolicy?.dedupe ?? (normalizedMethod === "GET" ? "join" : "off");
+  const debounceMsRaw = requestPolicy?.debounceMs;
+  const debounceMs =
+    typeof debounceMsRaw === "number" && Number.isFinite(debounceMsRaw)
+      ? Math.max(0, Math.floor(debounceMsRaw))
+      : 0;
+
+  return {
+    dedupe,
+    debounceMs,
+    key: requestPolicy?.key?.trim() || undefined,
+  };
+};
+
+type InflightRequestEntry<T = unknown> = {
+  controller: AbortController;
+  promise: Promise<T>;
+};
+
+type DebounceResolver<T> = {
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+};
+
+type DebounceRequestEntry<T = unknown> = {
+  timerId: ReturnType<typeof setTimeout> | null;
+  run: () => Promise<T>;
+  resolvers: DebounceResolver<T>[];
+};
+
+const inflightRequestMap = new Map<string, InflightRequestEntry<unknown>>();
+const debounceRequestMap = new Map<string, DebounceRequestEntry<unknown>>();
+
+const bindAbortSignal = (
+  controller: AbortController,
+  signal?: AxiosRequestConfig["signal"],
+) => {
+  if (!signal) {
+    return;
+  }
+  if (signal.aborted) {
+    controller.abort();
+    return;
+  }
+  if (typeof (signal as AbortSignal).addEventListener === "function") {
+    (signal as AbortSignal).addEventListener(
+      "abort",
+      () => controller.abort(),
+      {
+        once: true,
+      },
+    );
+  }
+};
+
+const stripRequestPolicy = <D>(
+  config?: AppRequestConfig<D>,
+): AxiosRequestConfig<D> => {
+  if (!config) {
+    return {};
+  }
+  const axiosConfig = { ...config } as AxiosRequestConfig<D> & {
+    requestPolicy?: RequestPolicy;
+  };
+  delete axiosConfig.requestPolicy;
+  return axiosConfig;
+};
+
+const withDebounce = <T>(
+  requestKey: string,
+  debounceMs: number,
+  run: () => Promise<T>,
+): Promise<T> => {
+  if (debounceMs <= 0) {
+    return run();
+  }
+
+  const existing = debounceRequestMap.get(requestKey) as
+    | DebounceRequestEntry<T>
+    | undefined;
+
+  if (existing) {
+    if (existing.timerId !== null) {
+      clearTimeout(existing.timerId);
+    }
+    existing.run = run;
+    return new Promise<T>((resolve, reject) => {
+      existing.resolvers.push({ resolve, reject });
+      existing.timerId = setTimeout(async () => {
+        const active = debounceRequestMap.get(requestKey) as
+          | DebounceRequestEntry<T>
+          | undefined;
+        if (!active) {
+          return;
+        }
+        debounceRequestMap.delete(requestKey);
+        try {
+          const result = await active.run();
+          active.resolvers.forEach((entry) => entry.resolve(result));
+        } catch (error) {
+          active.resolvers.forEach((entry) => entry.reject(error));
+        }
+      }, debounceMs);
+    });
+  }
+
+  const created: DebounceRequestEntry<T> = {
+    timerId: null,
+    run,
+    resolvers: [],
+  };
+  debounceRequestMap.set(requestKey, created as DebounceRequestEntry<unknown>);
+
+  return new Promise<T>((resolve, reject) => {
+    created.resolvers.push({ resolve, reject });
+    created.timerId = setTimeout(async () => {
+      const active = debounceRequestMap.get(requestKey) as
+        | DebounceRequestEntry<T>
+        | undefined;
+      if (!active) {
+        return;
+      }
+      debounceRequestMap.delete(requestKey);
+      try {
+        const result = await active.run();
+        active.resolvers.forEach((entry) => entry.resolve(result));
+      } catch (error) {
+        active.resolvers.forEach((entry) => entry.reject(error));
+      }
+    }, debounceMs);
+  });
+};
+
+const withInflightDedup = <T, D>(args: {
+  requestKey: string;
+  dedupe: RequestDedupeStrategy;
+  config?: AxiosRequestConfig<D>;
+  run: (config: AxiosRequestConfig<D>) => Promise<T>;
+}) => {
+  const existing = inflightRequestMap.get(args.requestKey) as
+    | InflightRequestEntry<T>
+    | undefined;
+
+  if (existing) {
+    if (args.dedupe === "join") {
+      return existing.promise;
+    }
+    if (args.dedupe === "reject") {
+      throw new AppError(
+        ErrorCode.OPERATION_FAILED,
+        "Duplicate request is in progress, please retry later.",
+      );
+    }
+    if (args.dedupe === "cancel-previous") {
+      existing.controller.abort();
+    }
+  }
+
+  const controller = new AbortController();
+  bindAbortSignal(controller, args.config?.signal);
+  const mergedConfig: AxiosRequestConfig<D> = {
+    ...(args.config ?? {}),
+    signal: controller.signal,
+  };
+
+  const promise = args.run(mergedConfig).finally(() => {
+    const active = inflightRequestMap.get(args.requestKey);
+    if (active?.promise === promise) {
+      inflightRequestMap.delete(args.requestKey);
+    }
+  });
+
+  if (args.dedupe !== "off") {
+    inflightRequestMap.set(args.requestKey, {
+      controller,
+      promise,
+    } as InflightRequestEntry<unknown>);
+  }
+
+  return promise;
+};
+
 export const createAxiosClient = (): AxiosInstance => {
   return axios.create({
     baseURL: getApiBaseUrl(),
@@ -264,53 +527,122 @@ axiosInstance.interceptors.response.use(
   (error: AxiosError) => Promise.reject(mapAxiosErrorToAppError(error)),
 );
 
+const executeWithPolicy = <T, D>(args: {
+  method: "GET" | "DELETE" | "POST" | "PUT" | "PATCH";
+  url: string;
+  data?: D;
+  config?: AppRequestConfig<D>;
+  run: (config: AxiosRequestConfig<D>) => Promise<T>;
+}) => {
+  const policy = resolveRequestPolicy(args.method, args.config?.requestPolicy);
+  const requestKey = buildRequestPolicyKey({
+    method: args.method,
+    url: args.url,
+    params: args.config?.params,
+    data: args.data,
+    explicitKey: policy.key,
+  });
+  const axiosConfig = stripRequestPolicy(args.config);
+
+  const runWithDedupe = () =>
+    withInflightDedup({
+      requestKey,
+      dedupe: policy.dedupe,
+      config: axiosConfig,
+      run: args.run,
+    });
+
+  return withDebounce(requestKey, policy.debounceMs, runWithDedupe);
+};
+
 const service: HttpClient = {
-  async get<T>(url: string, config?: AxiosRequestConfig) {
-    const response = await axiosInstance.get<BaseResponse<T> | T>(url, config);
-    return unwrapResponse(response);
-  },
-  async delete<T>(url: string, config?: AxiosRequestConfig) {
-    const response = await axiosInstance.delete<BaseResponse<T> | T>(
+  async get<T>(url: string, config?: AppRequestConfig) {
+    return executeWithPolicy<T, unknown>({
+      method: "GET",
       url,
       config,
-    );
-    return unwrapResponse(response);
+      run: async (axiosConfig) => {
+        const response = await axiosInstance.get<BaseResponse<T> | T>(
+          url,
+          axiosConfig,
+        );
+        return unwrapResponse(response);
+      },
+    });
+  },
+  async delete<T>(url: string, config?: AppRequestConfig) {
+    return executeWithPolicy<T, unknown>({
+      method: "DELETE",
+      url,
+      config,
+      run: async (axiosConfig) => {
+        const response = await axiosInstance.delete<BaseResponse<T> | T>(
+          url,
+          axiosConfig,
+        );
+        return unwrapResponse(response);
+      },
+    });
   },
   async post<T, D = unknown>(
     url: string,
     data?: D,
-    config?: AxiosRequestConfig<D>,
+    config?: AppRequestConfig<D>,
   ) {
-    const response = await axiosInstance.post<BaseResponse<T> | T>(
+    return executeWithPolicy<T, D>({
+      method: "POST",
       url,
       data,
       config,
-    );
-    return unwrapResponse(response);
+      run: async (axiosConfig) => {
+        const response = await axiosInstance.post<BaseResponse<T> | T>(
+          url,
+          data,
+          axiosConfig,
+        );
+        return unwrapResponse(response);
+      },
+    });
   },
   async put<T, D = unknown>(
     url: string,
     data?: D,
-    config?: AxiosRequestConfig<D>,
+    config?: AppRequestConfig<D>,
   ) {
-    const response = await axiosInstance.put<BaseResponse<T> | T>(
+    return executeWithPolicy<T, D>({
+      method: "PUT",
       url,
       data,
       config,
-    );
-    return unwrapResponse(response);
+      run: async (axiosConfig) => {
+        const response = await axiosInstance.put<BaseResponse<T> | T>(
+          url,
+          data,
+          axiosConfig,
+        );
+        return unwrapResponse(response);
+      },
+    });
   },
   async patch<T, D = unknown>(
     url: string,
     data?: D,
-    config?: AxiosRequestConfig<D>,
+    config?: AppRequestConfig<D>,
   ) {
-    const response = await axiosInstance.patch<BaseResponse<T> | T>(
+    return executeWithPolicy<T, D>({
+      method: "PATCH",
       url,
       data,
       config,
-    );
-    return unwrapResponse(response);
+      run: async (axiosConfig) => {
+        const response = await axiosInstance.patch<BaseResponse<T> | T>(
+          url,
+          data,
+          axiosConfig,
+        );
+        return unwrapResponse(response);
+      },
+    });
   },
 };
 
