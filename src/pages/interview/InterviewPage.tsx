@@ -77,6 +77,7 @@ export default function InterviewPage() {
             <InterviewResumeUploadCard
               fileInputRef={resume.fileInputRef}
               isResumeUploading={resume.isUploading}
+              showUploadButton={!isReady}
               resumeUploadStage={resume.uploadStage}
               resumeLocalFile={resume.localFile}
               resumeFileUrl={resume.fileUrl}

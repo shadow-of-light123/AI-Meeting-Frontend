@@ -13,7 +13,6 @@ import type {
 type UnknownRecord = Record<string, unknown>;
 
 export type ReportQueryData = {
-  radar: InterviewRadarChartResult | null;
   record: InterviewRecordResult | null;
 };
 
@@ -188,6 +187,15 @@ const buildRadarPointsFromDto = (
       return score === null ? null : { label, value: score };
     })
     .filter((item): item is RadarPoint => Boolean(item));
+};
+
+const pickFirstNonEmptyRadarPoints = (...groups: RadarPoint[][]) => {
+  for (const group of groups) {
+    if (group.length > 0) {
+      return group;
+    }
+  }
+  return [];
 };
 
 const parseQaReview = (value: unknown): QaReview | null => {
@@ -379,21 +387,10 @@ const extractReviewFeedback = (
 export async function fetchInterviewReportQueryData(
   sessionId: string,
 ): Promise<ReportQueryData> {
-  let radar: InterviewRadarChartResult | null = null;
-
-  try {
-    radar = await interviewService.getInterviewRadarChart(sessionId);
-  } catch (error) {
-    console.warn(
-      "[useInterviewReportData] radar-chart trigger failed, continue loading record",
-      error,
-    );
-  }
-
   try {
     const record =
       await interviewService.getInterviewRecordBySessionId(sessionId);
-    return { radar, record };
+    return { record };
   } catch {
     try {
       await interviewService.saveInterviewRecord({ sessionId });
@@ -407,13 +404,12 @@ export async function fetchInterviewReportQueryData(
 
     const record =
       await interviewService.getInterviewRecordBySessionId(sessionId);
-    return { radar, record };
+    return { record };
   }
 }
 
 export function buildInterviewReportViewModel(
   record: InterviewRecordResult | null,
-  radarResponse: InterviewRadarChartResult | null,
 ): InterviewReportViewModel {
   const rawRecord = toRecord(record);
   const snapshot = parseJsonRecord(
@@ -424,19 +420,25 @@ export function buildInterviewReportViewModel(
   );
 
   const radarPoints = (() => {
-    const fromRadarApi = buildRadarPointsFromDto(radarResponse);
-    if (fromRadarApi.length > 0) return fromRadarApi;
-
+    const fromRecordChartPayload = extractRadarPoints(
+      toRecord(
+        (record?.radarChart as InterviewRadarChartResult | null | undefined) ??
+          null,
+      ),
+    );
     const fromRecordChart = buildRadarPointsFromDto(
       (record?.radarChart as InterviewRadarChartResult | null | undefined) ??
         null,
     );
-    if (fromRecordChart.length > 0) return fromRecordChart;
-
     const fromRecord = extractRadarPoints(rawRecord);
-    if (fromRecord.length > 0) return fromRecord;
-
-    return extractRadarPoints(snapshot);
+    const fromSnapshot = extractRadarPoints(snapshot);
+    const fallbackCandidates = [
+      fromRecordChart,
+      fromRecordChartPayload,
+      fromRecord,
+      fromSnapshot,
+    ];
+    return pickFirstNonEmptyRadarPoints(...fallbackCandidates);
   })();
 
   const qaReviews = mergeQaReviews(
@@ -448,28 +450,28 @@ export function buildInterviewReportViewModel(
 
   const resumeScore = pickFirstNumber(
     record?.resumeScore,
-    radarResponse?.resumeScore,
     rawRecord?.resumeScore,
     snapshot?.resumeScore,
   );
 
   const interviewScore = pickFirstNumber(
     record?.interviewScore,
-    radarResponse?.interviewPerformance,
-    radarResponse?.interviewScore,
-    radarResponse?.totalScore,
     rawRecord?.interviewScore,
+    rawRecord?.interviewPerformance,
     snapshot?.interviewScore,
+    snapshot?.interviewPerformance,
   );
 
   const rawCompositeScore = pickFirstNumber(
     record?.compositeScore,
     record?.totalScore,
     record?.finalScore,
-    radarResponse?.potentialIndex,
     rawRecord?.compositeScore,
     rawRecord?.totalScore,
     rawRecord?.finalScore,
+    snapshot?.compositeScore,
+    snapshot?.totalScore,
+    snapshot?.finalScore,
     snapshot?.potentialIndex,
   );
 

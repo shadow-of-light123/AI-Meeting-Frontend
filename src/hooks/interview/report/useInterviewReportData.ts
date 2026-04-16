@@ -23,12 +23,8 @@ export function useInterviewReportData(reportSessionId: string | null) {
   }, [query.error]);
 
   const reportViewModel = useMemo(
-    () =>
-      buildInterviewReportViewModel(
-        query.data?.record ?? null,
-        query.data?.radar ?? null,
-      ),
-    [query.data?.radar, query.data?.record],
+    () => buildInterviewReportViewModel(query.data?.record ?? null),
+    [query.data?.record],
   );
 
   return {

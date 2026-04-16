@@ -15,6 +15,7 @@ const RESUME_UPLOAD_STAGES = [
 type InterviewResumeUploadCardProps = {
   fileInputRef: RefObject<HTMLInputElement | null>;
   isResumeUploading: boolean;
+  showUploadButton: boolean;
   resumeUploadStage: number;
   resumeLocalFile: File | null;
   resumeFileUrl: string | null;
@@ -29,6 +30,7 @@ type InterviewResumeUploadCardProps = {
 export default function InterviewResumeUploadCard({
   fileInputRef,
   isResumeUploading,
+  showUploadButton,
   resumeUploadStage,
   resumeLocalFile,
   resumeFileUrl,
@@ -69,14 +71,16 @@ export default function InterviewResumeUploadCard({
             className="hidden"
             onChange={onResumeFileSelect}
           />
-          <Button
-            variant="outline"
-            className="rounded-full"
-            disabled={isResumeUploading}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {isResumeUploading ? "上传中..." : "上传简历"}
-          </Button>
+          {showUploadButton ? (
+            <Button
+              variant="outline"
+              className="rounded-full"
+              disabled={isResumeUploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {isResumeUploading ? "上传中..." : "上传简历"}
+            </Button>
+          ) : null}
           {hasResumeEntry ? (
             <Button
               variant="ghost"
