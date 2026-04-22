@@ -1,5 +1,5 @@
 export const MARKETING_HERO_VIDEO_SRC = "/videos/home-bg.mp4";
-export const MARKETING_PROJECT_DEMO_VIDEO_SRC = "/videos/background.mp4";
+export const MARKETING_PROJECT_DEMO_VIDEO_SRC = "/videos/interview.mp4";
 
 export const MARKETING_TEXT = {
   heroTitle: "码上面试",
