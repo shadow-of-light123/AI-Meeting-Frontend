@@ -78,9 +78,9 @@
 
 ## 文档展示
 
-![文档首页截图](docs copy/assets/文档首页截图.png)
-![文档部分截图](docs copy/assets/文档截图.png)
-![文档部分截图](docs copy/assets/文档截图2.png)
+![文档首页截图](docs/assets/文档首页截图.png)
+![文档部分截图](docs/assets/文档截图.png)
+![文档部分截图](docs/assets/文档截图2.png)
 
 ## 技术栈
 
