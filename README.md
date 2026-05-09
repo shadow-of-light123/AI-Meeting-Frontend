@@ -159,35 +159,35 @@
 
 首页登录：
 
-![首页登录](docs copy/assets/首页登陆.png)
+![首页登录](docs/assets/首页登陆.png)
 
 上传简历：
 
-![上传简历](docs copy/assets/上传简历.png)
+![上传简历](docs/assets/上传简历.png)
 
 在线解析并出题：
 
-![在线解析并出题](docs copy/assets/在线解析并出题.png)
+![在线解析并出题](docs/assets/在线解析并出题.png)
 
 面试入口：
 
-![面试入口](docs copy/assets/面试入口.png)
+![面试入口](docs/assets/面试入口.png)
 
 提问环节：
 
-![提问环节](docs copy/assets/提问环节.png)
+![提问环节](docs/assets/提问环节.png)
 
 追问环节：
 
-![追问环节](docs copy/assets/追问环节.png)
+![追问环节](docs/assets/追问环节.png)
 
 结果复盘：
 
-![结果复盘](docs copy/assets/结果复盘.png)
+![结果复盘](docs/assets/结果复盘.png)
 
 面试结果分析：
 
-![面试结果分析](docs copy/assets/面试结果分析.png)
+![面试结果分析](docs/assets/面试结果分析.png)
 
 ## 开源协作
 
