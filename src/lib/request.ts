@@ -1,3 +1,21 @@
+/**
+ * request.ts —— 项目 HTTP 请求层的统一封装
+ *
+ * 核心职责：
+ * 1. 基于 Axios 实例，统一 baseURL、超时、Content-Type
+ * 2. 自动注入 Authorization Token（除登录/注册等白名单路径外）
+ * 3. 后端统一响应格式 BaseResponse<T> 自动解包为 data
+ * 4. Axios 错误 → AppError 统一映射（含 401/403 等业务状态码）
+ * 5. 请求去重与防抖：通过 requestPolicy 支持四种并发策略
+ * 6. SSE 以外的所有 HTTP 请求均通过此模块发出
+ *
+ * 数据流向：
+ * 组件/Hook → service(方法) → executeWithPolicy → withDebounce → withInflightDedup
+ *   → axiosInstance.request → 拦截器(注入Token) → 后端
+ *   ← 拦截器(错误映射) ← axiosInstance.response
+ *   ← unwrapResponse(解包BaseResponse)
+ */
+
 import axios, {
   AxiosError,
   AxiosHeaders,
@@ -13,32 +31,55 @@ import {
 } from "@/lib/errors";
 import { getAuthToken } from "@/lib/authToken";
 
+// ============================================================================
+// 类型定义
+// ============================================================================
+
+/** 后端统一返回的响应格式 */
 export interface BaseResponse<T = unknown> {
+  /** 业务状态码，"0" 表示成功 */
   code: string;
+  /** 错误/提示消息 */
   message: string | null;
+  /** 实际业务数据 */
   data: T;
+  /** 请求追踪 ID */
   requestId: string | null;
+  /** 请求是否成功 */
   success: boolean;
 }
 
 export type ApiResponse<T = unknown> = BaseResponse<T>;
 
+/**
+ * 请求去重策略：
+ * - off:            不进行去重，每次调用都发起真实请求
+ * - join:           同一 key 的并发请求共享首个请求的结果（适用于 GET 幂等查询）
+ * - cancel-previous: 新请求到达时取消上一个尚未完成的同 key 请求
+ * - reject:         同一 key 已有进行中的请求时直接拒绝新请求（适用于防止重复提交）
+ */
 export type RequestDedupeStrategy =
   | "off"
   | "join"
   | "cancel-previous"
   | "reject";
 
+/** 单次请求的策略配置 */
 export type RequestPolicy = {
+  /** 手动指定的去重 key；不填则自动根据 method + url + params + data 生成 */
   key?: string;
+  /** 去重策略，GET 默认为 "join"，其他方法默认为 "off" */
   dedupe?: RequestDedupeStrategy;
+  /** 防抖等待时间(ms)，0 表示不防抖 */
   debounceMs?: number;
 };
 
+/** 扩展 AxiosRequestConfig，添加 requestPolicy 字段 */
 export type AppRequestConfig<D = unknown> = AxiosRequestConfig<D> & {
   requestPolicy?: RequestPolicy;
 };
 
+/** HTTP 客户端接口，所有方法均自动解包 BaseResponse 并返回 data */
 export interface HttpClient {
   get<T>(url: string, config?: AppRequestConfig): Promise<T>;
   delete<T>(url: string, config?: AppRequestConfig): Promise<T>;
@@ -59,14 +100,28 @@ export interface HttpClient {
   ): Promise<T>;
 }
 
+// ============================================================================
+// 基础配置
+// ============================================================================
+
+/** 获取当前环境的 API baseURL（默认 /api） */
 export const getApiBaseUrl = () => resolveAppEnv().apiBaseUrl;
 
+/**
+ * 无需携带 Token 的 API 路径白名单
+ * 这些路径在请求拦截器中会跳过 Authorization 注入
+ */
 const AUTH_FREE_API_PATHS = new Set([
   "/xunzhi/v1/users/login",
   "/xunzhi/v1/users/register",
   "/xunzhi/v1/users/check-login",
 ]);
 
+// ============================================================================
+// URL 路径处理
+// ============================================================================
+
+/** 去除 URL 中的查询参数和 hash 部分，只保留纯净路径 */
 const trimQueryAndHash = (path: string) => {
   const queryIndex = path.indexOf("?");
   const hashIndex = path.indexOf("#");
@@ -77,6 +132,12 @@ const trimQueryAndHash = (path: string) => {
   return path.slice(0, Math.min(...stopIndexes));
 };
 
+/**
+ * 将任意格式的请求 URL 归一化为绝对路径形式（用于去重 key 生成和鉴权判断）
+ * - 完整 URL(http://...)  → 提取 pathname
+ * - 相对路径              → 去掉 baseURL 前缀后返回
+ * - 空值                  → 返回 ""
+ */
 const normalizeRequestPath = (url?: string) => {
   if (!url) {
     return "";
@@ -100,6 +161,14 @@ const normalizeRequestPath = (url?: string) => {
   return trimQueryAndHash(normalizedRelative);
 };
 
+// ============================================================================
+// 认证相关
+// ============================================================================
+
+/**
+ * 判断请求是否需要注入 Token
+ * 规则：以 /xunzhi/v1/ 开头的路径需要 Token，但白名单路径除外
+ */
 export const requiresAuthTokenForRequest = (url?: string) => {
   const path = normalizeRequestPath(url);
   if (!path.startsWith("/xunzhi/v1/")) {
@@ -108,6 +177,10 @@ export const requiresAuthTokenForRequest = (url?: string) => {
   return !AUTH_FREE_API_PATHS.has(path);
 };
 
+/**
+ * 断言当前请求已授权：如果需要 Token 但本地没有，直接抛出 UNAUTHORIZED 错误
+ * 返回 Token 字符串供调用方用于构造 fetch/SSE 等非 Axios 请求的 Authorization 头
+ */
 export const assertRequestAuthorized = (url: string | undefined) => {
   const token = getAuthToken();
   if (requiresAuthTokenForRequest(url) && !token) {
@@ -119,6 +192,11 @@ export const assertRequestAuthorized = (url: string | undefined) => {
   return token;
 };
 
+/**
+ * 拼接完整的 API URL
+ * @param path  接口路径（如 /xunzhi/v1/ai/conversations）
+ * @param query 可选的查询参数对象，自动过滤 null/undefined/空字符串
+ */
 export const buildApiUrl = (
   path: string,
   query?: Record<string, string | number | boolean | null | undefined>,
@@ -142,6 +220,11 @@ export const buildApiUrl = (
   return queryString ? `${baseUrl}?${queryString}` : baseUrl;
 };
 
+// ============================================================================
+// 响应解包 & 错误映射
+// ============================================================================
+
+/** 将后端业务状态码映射为前端标准 ErrorCode */
 export const mapBusinessCode = (code: string | undefined): ErrorCodeValue => {
   switch (code) {
     case "401":
@@ -153,6 +236,7 @@ export const mapBusinessCode = (code: string | undefined): ErrorCodeValue => {
   }
 };
 
+/** 类型守卫：判断 payload 是否满足 BaseResponse 结构 */
 export const isBaseResponse = <T>(
   payload: unknown,
 ): payload is BaseResponse<T> => {
@@ -162,6 +246,12 @@ export const isBaseResponse = <T>(
   return "data" in payload && ("code" in payload || "success" in payload);
 };
 
+/**
+ * 从 BaseResponse<T> | T 中提取业务数据 T
+ * - 如果是 BaseResponse 且 code==="0" 或 success===true → 返回 data
+ * - 如果是 BaseResponse 但业务失败 → 抛出 AppError
+ * - 如果不是 BaseResponse → 原样返回
+ */
 export const unwrapResponseData = <T>(payload: BaseResponse<T> | T): T => {
   if (isBaseResponse<T>(payload)) {
     if (payload.code === "0" || payload.success) {
@@ -178,17 +268,24 @@ export const unwrapResponseData = <T>(payload: BaseResponse<T> | T): T => {
   return payload;
 };
 
+/** 从 AxiosResponse 中解包业务数据（调用 unwrapResponseData） */
 export const unwrapResponse = <T>(
   response: AxiosResponse<BaseResponse<T> | T>,
 ): T => {
   return unwrapResponseData(response.data);
 };
 
+/**
+ * 将 Axios 层的错误统一转换为 AppError
+ * 覆盖：请求取消、HTTP 状态码(400/401/403/404/500)、超时、断网
+ */
 export const mapAxiosErrorToAppError = (error: AxiosError): AppError => {
+  // Axios CancelToken / AbortController 触发的取消
   if (axios.isCancel(error)) {
     return new AppError(ErrorCode.ABORTED, "Request was cancelled", error);
   }
 
+  // 服务端返回了 HTTP 响应
   if (error.response) {
     switch (error.response.status) {
       case 400:
@@ -226,10 +323,12 @@ export const mapAxiosErrorToAppError = (error: AxiosError): AppError => {
     }
   }
 
+  // 超时
   if (error.code === "ECONNABORTED") {
     return new AppError(ErrorCode.REQUEST_TIMEOUT, "Request timeout", error);
   }
 
+  // 浏览器断网
   if (typeof window !== "undefined" && !window.navigator.onLine) {
     return new AppError(
       ErrorCode.NETWORK_ERROR,
@@ -238,6 +337,7 @@ export const mapAxiosErrorToAppError = (error: AxiosError): AppError => {
     );
   }
 
+  // 其他网络错误
   return new AppError(
     ErrorCode.NETWORK_ERROR,
     error.message || "Network request failed",
@@ -245,6 +345,18 @@ export const mapAxiosErrorToAppError = (error: AxiosError): AppError => {
   );
 };
 
+// ============================================================================
+// 请求去重 key 生成 —— 稳定序列化
+// ============================================================================
+
+/**
+ * 将任意 JS 值稳定地序列化为字符串（用于生成请求去重的唯一 key）
+ *
+ * 为什么不用 JSON.stringify？
+ * - JSON.stringify 的对象属性顺序取决于插入顺序，相同语义的请求可能生成不同的 key
+ * - 此处按 key 排序后序列化，保证 {a:1,b:2} 和 {b:2,a:1} 生成相同字符串
+ * - 对 FormData、循环引用等边界情况有专门处理
+ */
 const stableSerialize = (
   value: unknown,
   seen = new WeakSet<object>(),
@@ -264,6 +376,7 @@ const stableSerialize = (
   if (value instanceof URLSearchParams) {
     return value.toString();
   }
+  // FormData 不可枚举，统一用占位符
   if (typeof FormData !== "undefined" && value instanceof FormData) {
     return "[form-data]";
   }
@@ -271,6 +384,7 @@ const stableSerialize = (
     return `[${value.map((item) => stableSerialize(item, seen)).join(",")}]`;
   }
   if (typeof value === "object") {
+    // 循环引用检测
     if (seen.has(value as object)) {
       return "[circular]";
     }
@@ -286,6 +400,11 @@ const stableSerialize = (
   return String(value);
 };
 
+/**
+ * 生成请求去重的唯一 key
+ * - 如果有 explicitKey，直接使用
+ * - 否则自动按 METHOD::PATH::params=X::data=Y 格式拼接
+ */
 export const buildRequestPolicyKey = (args: {
   method: string;
   url: string;
@@ -304,6 +423,11 @@ export const buildRequestPolicyKey = (args: {
   return `${normalizedMethod}::${normalizedPath}::params=${serializedParams}::data=${serializedData}`;
 };
 
+/**
+ * 解析并规范化请求策略
+ * - GET 请求默认 dedupe 策略为 "join"（并发合并），其他方法默认为 "off"
+ * - debounceMs 仅当为正整数时生效
+ */
 export const resolveRequestPolicy = (
   method: string,
   requestPolicy?: RequestPolicy,
@@ -324,25 +448,44 @@ export const resolveRequestPolicy = (
   };
 };
 
+// ============================================================================
+// 请求去重 & 防抖引擎（模块级全局状态）
+// ============================================================================
+
+/**
+ * 进行中的请求条目
+ * - controller: 用于 cancel-previous 策略时取消旧请求
+ * - promise:    用于 join 策略时复用并发请求的结果
+ */
 type InflightRequestEntry<T = unknown> = {
   controller: AbortController;
   promise: Promise<T>;
 };
 
+/** 防抖等待中的回调收集器 */
 type DebounceResolver<T> = {
   resolve: (value: T) => void;
   reject: (error: unknown) => void;
 };
 
+/** 防抖请求条目：收集同一 key 下多次调用的 resolve/reject，定时器到期后执行最新的一次 run() */
 type DebounceRequestEntry<T = unknown> = {
   timerId: ReturnType<typeof setTimeout> | null;
+  /** 要执行的最新请求函数（连续触发时始终更新为最后一次） */
   run: () => Promise<T>;
+  /** 等待结果的回调列表 */
   resolvers: DebounceResolver<T>[];
 };
 
+/** 全局 inflight 请求 Map：key → 进行中的请求 */
 const inflightRequestMap = new Map<string, InflightRequestEntry<unknown>>();
+/** 全局防抖请求 Map：key → 待执行的防抖条目 */
 const debounceRequestMap = new Map<string, DebounceRequestEntry<unknown>>();
 
+/**
+ * 将外部 AbortSignal 绑定到内部 AbortController
+ * 当外部 signal 被 abort 时，内部 controller 也会 abort
+ */
 const bindAbortSignal = (
   controller: AbortController,
   signal?: AxiosRequestConfig["signal"],
@@ -365,6 +508,7 @@ const bindAbortSignal = (
   }
 };
 
+/** 从 config 中移除 requestPolicy 字段，避免传入 Axios */
 const stripRequestPolicy = <D>(
   config?: AppRequestConfig<D>,
 ): AxiosRequestConfig<D> => {
@@ -378,6 +522,13 @@ const stripRequestPolicy = <D>(
   return axiosConfig;
 };
 
+/**
+ * 防抖执行：在 debounceMs 内多次调用同一 key 的请求时，
+ * 只执行最后一次，但所有调用方共享同一个结果
+ *
+ * 典型场景：搜索输入框实时联想，用户连续输入时不立即发请求，
+ * 等停止输入 debounceMs 后再发一次
+ */
 const withDebounce = <T>(
   requestKey: string,
   debounceMs: number,
@@ -391,6 +542,7 @@ const withDebounce = <T>(
     | DebounceRequestEntry<T>
     | undefined;
 
+  // 同一 key 已有等待中的防抖 → 重置定时器，替换为最新的 run
   if (existing) {
     if (existing.timerId !== null) {
       clearTimeout(existing.timerId);
@@ -416,6 +568,7 @@ const withDebounce = <T>(
     });
   }
 
+  // 首次调用 → 创建防抖条目
   const created: DebounceRequestEntry<T> = {
     timerId: null,
     run,
@@ -443,6 +596,14 @@ const withDebounce = <T>(
   });
 };
 
+/**
+ * Inflight 去重：根据 dedupe 策略处理并发重复请求
+ *
+ * join:            已有同 key 请求在进行 → 直接返回该请求的 Promise（共享结果）
+ * reject:          已有同 key 请求在进行 → 抛出 AppError 拒绝新请求
+ * cancel-previous: 已有同 key 请求在进行 → abort 旧请求，发起新请求
+ * off:             不做任何处理，直接发起新请求
+ */
 const withInflightDedup = <T, D>(args: {
   requestKey: string;
   dedupe: RequestDedupeStrategy;
@@ -475,6 +636,7 @@ const withInflightDedup = <T, D>(args: {
     signal: controller.signal,
   };
 
+  // 请求完成后自动从 inflightMap 中清除
   const promise = args.run(mergedConfig).finally(() => {
     const active = inflightRequestMap.get(args.requestKey);
     if (active?.promise === promise) {
@@ -492,6 +654,15 @@ const withInflightDedup = <T, D>(args: {
   return promise;
 };
 
+// ============================================================================
+// Axios 实例 & 拦截器
+// ============================================================================
+
+/**
+ * 创建 Axios 实例
+ * - baseURL 为 VITE_API_BASE_URL（默认 /api）
+ * - 默认超时 10s（长耗时接口如面试答题需单独增加 timeout）
+ */
 export const createAxiosClient = (): AxiosInstance => {
   return axios.create({
     baseURL: getApiBaseUrl(),
@@ -504,6 +675,11 @@ export const createAxiosClient = (): AxiosInstance => {
 
 const axiosInstance = createAxiosClient();
 
+/**
+ * 请求拦截器
+ * - 对于需要认证的路径，自动从 localStorage 读取 Token 并注入 Authorization 头
+ * - 白名单路径（登录/注册/检查登录态）跳过注入
+ */
 axiosInstance.interceptors.request.use(
   (config) => {
     const token = assertRequestAuthorized(config.url);
@@ -522,11 +698,29 @@ axiosInstance.interceptors.request.use(
     ),
 );
 
+/**
+ * 响应拦截器
+ * - 成功响应不做处理，留给 executeWithPolicy 中的 unwrapResponse 解包
+ * - 错误响应统一通过 mapAxiosErrorToAppError 转换为 AppError
+ */
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => Promise.reject(mapAxiosErrorToAppError(error)),
 );
 
+// ============================================================================
+// 请求策略执行管道
+// ============================================================================
+
+/**
+ * 单次请求的执行管道，按顺序经过以下环节：
+ * 1. resolveRequestPolicy   → 解析出 dedupe / debounceMs / key
+ * 2. buildRequestPolicyKey  → 生成请求去重 key
+ * 3. stripRequestPolicy     → 移除 requestPolicy 避免进入 Axios
+ * 4. withDebounce           → 防抖（debounceMs > 0 时生效）
+ * 5. withInflightDedup      → 并发去重（dedupe !== "off" 时生效）
+ * 6. run(config)            → 实际发起请求
+ */
 const executeWithPolicy = <T, D>(args: {
   method: "GET" | "DELETE" | "POST" | "PUT" | "PATCH";
   url: string;
@@ -555,6 +749,31 @@ const executeWithPolicy = <T, D>(args: {
   return withDebounce(requestKey, policy.debounceMs, runWithDedupe);
 };
 
+// ============================================================================
+// 统一 HTTP 客户端（默认导出）
+// ============================================================================
+
+/**
+ * 项目中所有 HTTP 请求的统一入口
+ *
+ * 使用方式：
+ * ```
+ * import service from "@/lib/request";
+ *
+ * // 普通 GET
+ * const data = await service.get("/xunzhi/v1/ai/conversations", { params: { current: 1 } });
+ *
+ * // 带防抖/去重策略的 POST
+ * const result = await service.post("/xunzhi/v1/interview/answer", payload, {
+ *   requestPolicy: { dedupe: "reject", debounceMs: 250 },
+ * });
+ * ```
+ *
+ * 每种方法都会：
+ * 1. 经过 executeWithPolicy 管道（去重/防抖）
+ * 2. 经过 Axios 拦截器（注入 Token / 错误映射）
+ * 3. 自动解包 BaseResponse，直接返回 data
+ */
 const service: HttpClient = {
   async get<T>(url: string, config?: AppRequestConfig) {
     return executeWithPolicy<T, unknown>({
