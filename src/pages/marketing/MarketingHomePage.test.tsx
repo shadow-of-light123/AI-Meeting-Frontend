@@ -50,6 +50,7 @@ const createStore = (isAuthenticated: boolean) =>
         activeStreamRequestId: null,
         activeStreamSessionId: null,
         activeStreamMessageId: null,
+        isStartingNewSession: false,
       },
     },
   });

@@ -1,7 +1,8 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { APP_BRAND_NAME } from "@/lib/branding";
 import { cn } from "@/lib/utils";
+import { useStartNewChatSession } from "@/hooks/chat/useStartNewChatSession";
 
 type SidebarHeaderProps = {
   isCollapsed?: boolean;
@@ -12,6 +13,8 @@ export default function SidebarHeader({
   isCollapsed,
   onToggleCollapse,
 }: SidebarHeaderProps) {
+  const startNewChatSession = useStartNewChatSession();
+
   return (
     <div
       className={cn(
@@ -36,20 +39,33 @@ export default function SidebarHeader({
           </span>
         )}
       </div>
-      {onToggleCollapse && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn("h-7 w-7", isCollapsed && "absolute right-2 top-4")}
-          onClick={onToggleCollapse}
-        >
-          {isCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
-          )}
-        </Button>
-      )}
+      <div className="flex items-center gap-1">
+        {!isCollapsed && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-full"
+            onClick={startNewChatSession}
+            title="新建会话"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        )}
+        {onToggleCollapse && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("h-7 w-7", isCollapsed && "absolute right-2 top-4")}
+            onClick={onToggleCollapse}
+          >
+            {isCollapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" />
+            )}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

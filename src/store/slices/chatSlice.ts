@@ -20,6 +20,8 @@ export interface ChatState {
   activeStreamRequestId: string | null;
   activeStreamSessionId: string | null;
   activeStreamMessageId: string | null;
+  /** 正在切换到空白新会话，过渡期间禁止历史重载与 runtime 重定向 */
+  isStartingNewSession: boolean;
 }
 
 export const initialState: ChatState = {
@@ -32,6 +34,7 @@ export const initialState: ChatState = {
   activeStreamRequestId: null,
   activeStreamSessionId: null,
   activeStreamMessageId: null,
+  isStartingNewSession: false,
 };
 
 const resetRuntimeState = (state: ChatState) => {
@@ -44,6 +47,7 @@ const resetRuntimeState = (state: ChatState) => {
   state.activeStreamRequestId = null;
   state.activeStreamSessionId = null;
   state.activeStreamMessageId = null;
+  state.isStartingNewSession = false;
 };
 
 export const chatSlice = createSlice({
@@ -52,6 +56,13 @@ export const chatSlice = createSlice({
   reducers: {
     resetChatRuntime: (state) => {
       resetRuntimeState(state);
+    },
+    beginNewChatSession: (state) => {
+      resetRuntimeState(state);
+      state.isStartingNewSession = true;
+    },
+    finishStartingNewChatSession: (state) => {
+      state.isStartingNewSession = false;
     },
     setChatRuntimeSession: (
       state,
@@ -174,6 +185,8 @@ export const chatSlice = createSlice({
 
 export const {
   resetChatRuntime,
+  beginNewChatSession,
+  finishStartingNewChatSession,
   setChatRuntimeSession,
   hydrateChatSession,
   setPendingOutbound,
