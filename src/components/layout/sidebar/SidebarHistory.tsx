@@ -28,6 +28,8 @@ export default function SidebarHistory({ isCollapsed }: SidebarHistoryProps) {
     isFetchingNextPage,
     isFetchingNextInterviewPage,
     handleScroll,
+    deleteConversation,
+    deletingSessionId,
   } = useSidebarHistoryController(isCollapsed);
 
   const activeInterviewSessionId = location.pathname.startsWith(
@@ -74,9 +76,11 @@ export default function SidebarHistory({ isCollapsed }: SidebarHistoryProps) {
               activePathname={location.pathname}
               hasNextPage={hasNextPage}
               isFetchingNextPage={isFetchingNextPage}
+              deletingSessionId={deletingSessionId}
               onOpenSession={(sessionId) =>
                 navigate(`${ROUTES.chat}/${sessionId}`)
               }
+              onDeleteSession={deleteConversation}
             />
           ) : (
             <SidebarInterviewList

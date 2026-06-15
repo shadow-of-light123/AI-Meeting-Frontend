@@ -1,5 +1,8 @@
 import { useCallback, useState, type UIEvent } from "react";
-import { useConversations } from "@/hooks/useConversations";
+import {
+  useConversations,
+  useDeleteConversation,
+} from "@/hooks/useConversations";
 import { useInterviewRecords } from "@/hooks/interview/records/useInterviewRecords";
 
 export type SidebarHistoryView = "sessions" | "interviews";
@@ -13,6 +16,7 @@ export function useSidebarHistoryController(isCollapsed?: boolean) {
     useConversations({
       enabled: shouldFetchConversations,
     });
+  const { deleteConversation, deletingSessionId } = useDeleteConversation();
   const {
     interviewRecords,
     fetchNextPage: fetchNextInterviewPage,
@@ -64,5 +68,7 @@ export function useSidebarHistoryController(isCollapsed?: boolean) {
     isFetchingNextPage,
     isFetchingNextInterviewPage,
     handleScroll,
+    deleteConversation,
+    deletingSessionId,
   };
 }

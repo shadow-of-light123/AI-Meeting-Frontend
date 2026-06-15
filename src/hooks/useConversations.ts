@@ -1,6 +1,10 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import { aiService } from "@/services/aiService";
-import { useAppSelector } from "@/store/hooks";
+import { ROUTES } from "@/lib/constants";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { resetChatRuntime } from "@/store/slices/chatSlice";
 import type { UserRespDTO } from "@/types/auth";
 
 type ConversationUserIdentity =
@@ -62,5 +66,61 @@ export function useConversations(options: UseConversationsOptions = {}) {
     isFetchingNextPage,
     status,
     refetch,
+  };
+}
+
+export function useDeleteConversation() {
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const { currentUser, authEpoch } = useAppSelector((state) => state.user);
+  const { currentSessionId } = useAppSelector((state) => state.chat);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
+    null,
+  );
+
+  const deleteConversation = useCallback(
+    async (sessionId: string) => {
+      if (deletingSessionId) {
+        return;
+      }
+
+      setDeletingSessionId(sessionId);
+      try {
+        await aiService.deleteConversation(sessionId);
+
+        const userKey = getConversationUserKey(currentUser);
+        await queryClient.invalidateQueries({
+          queryKey: getConversationsQueryKey(userKey, authEpoch),
+        });
+
+        const isActiveSession =
+          location.pathname.includes(sessionId) ||
+          currentSessionId === sessionId;
+
+        if (isActiveSession) {
+          dispatch(resetChatRuntime());
+          navigate(ROUTES.chat);
+        }
+      } finally {
+        setDeletingSessionId(null);
+      }
+    },
+    [
+      authEpoch,
+      currentSessionId,
+      currentUser,
+      deletingSessionId,
+      dispatch,
+      location.pathname,
+      navigate,
+      queryClient,
+    ],
+  );
+
+  return {
+    deleteConversation,
+    deletingSessionId,
   };
 }

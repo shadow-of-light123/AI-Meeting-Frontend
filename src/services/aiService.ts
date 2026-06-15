@@ -242,6 +242,15 @@ export const aiService = {
   },
 
   /**
+   * 删除指定对话会话。
+   */
+  deleteConversation: (sessionId: string) => {
+    return service.delete<null>(
+      `/xunzhi/v1/ai/conversations/${encodeURIComponent(sessionId)}`,
+    );
+  },
+
+  /**
    * SSE 流式对话 —— 使用 fetchEventSource 发起 POST 请求，
    * 通过回调实时接收服务端推送的文本/推理增量。
    *
