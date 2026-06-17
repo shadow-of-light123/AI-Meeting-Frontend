@@ -51,7 +51,7 @@ export default function ChatRoom({
         {contentOverlay}
       </div>
       <div className="p-4 border-t bg-white relative z-30">
-        <div className="max-w-3xl mx-auto relative">
+        <div className="max-w-4xl mx-auto relative">
           {customComposer ? (
             customComposer
           ) : (

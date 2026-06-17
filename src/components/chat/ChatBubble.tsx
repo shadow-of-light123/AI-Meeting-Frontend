@@ -63,7 +63,12 @@ export default function ChatBubble({
         isUser ? "justify-end" : "justify-start",
       )}
     >
-      <div className="flex flex-col max-w-[80%] gap-2">
+      <div
+        className={cn(
+          "flex flex-col gap-2",
+          isUser ? "max-w-[80%]" : "w-full max-w-full",
+        )}
+      >
         {hasReasoning && reasoning ? (
           <ChatReasoningPanel
             reasoning={reasoning}

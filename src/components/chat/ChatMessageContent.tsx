@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
+import "highlight.js/styles/atom-one-dark.min.css";
 
 type ChatMessageContentProps = {
   content: string;
@@ -18,6 +20,7 @@ export default function ChatMessageContent({
       <div className="prose prose-sm dark:prose-invert max-w-none break-words">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
+          rehypePlugins={[[rehypeHighlight, { detect: true }]]}
           components={{
             p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
           }}

@@ -19,7 +19,7 @@ export default function Sidebar({
   return (
     <div
       className={cn(
-        "h-full bg-slate-50 border-r border-slate-200 flex flex-col",
+        "h-full bg-slate-50 border-r border-slate-200 flex min-w-0 flex-col overflow-hidden",
         className,
       )}
     >

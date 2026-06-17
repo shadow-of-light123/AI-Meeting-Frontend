@@ -68,8 +68,11 @@ export default function SidebarHistory({ isCollapsed }: SidebarHistoryProps) {
         </Button>
       </div>
 
-      <ScrollArea className="-mx-2 flex-1" onScrollCapture={handleScroll}>
-        <div className="space-y-1 px-2 pb-2">
+      <ScrollArea
+        className="-mx-2 min-w-0 flex-1"
+        onScrollCapture={handleScroll}
+      >
+        <div className="min-w-0 space-y-1 px-2 pb-2">
           {view === "sessions" ? (
             <SidebarSessionList
               conversations={conversations}

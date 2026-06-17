@@ -25,7 +25,7 @@ function ChatList({
 
   return (
     <ScrollArea className={className} ref={scrollRef}>
-      <div className="max-w-3xl mx-auto space-y-6 pb-20 ">
+      <div className="max-w-4xl mx-auto space-y-6 pb-20 ">
         {topContent}
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
