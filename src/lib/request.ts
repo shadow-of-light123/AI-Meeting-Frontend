@@ -384,18 +384,20 @@ const stableSerialize = (
     return `[${value.map((item) => stableSerialize(item, seen)).join(",")}]`;
   }
   if (typeof value === "object") {
+    // 如果是对象类型
     // 循环引用检测
     if (seen.has(value as object)) {
-      return "[circular]";
+      // 如果该对象已在 seen 集合中出现过
+      return "[circular]"; // 返回 "[circular]" 标记，避免无限递归
     }
-    seen.add(value as object);
-    const record = value as Record<string, unknown>;
-    const serialized = Object.keys(record)
-      .sort()
-      .map((key) => `${key}:${stableSerialize(record[key], seen)}`)
-      .join(",");
-    seen.delete(value as object);
-    return `{${serialized}}`;
+    seen.add(value as object); // 将当前对象加入 seen 集合，追踪已访问对象
+    const record = value as Record<string, unknown>; // 将 value 断言为键值对记录类型
+    const serialized = Object.keys(record) // 获取对象的所有键
+      .sort() // 按键名排序，保证序列化结果稳定
+      .map((key) => `${key}:${stableSerialize(record[key], seen)}`) // 递归序列化每个键值对
+      .join(","); // 用逗号拼接所有键值对
+    seen.delete(value as object); // 序列化完成后从 seen 中移除，恢复原状态
+    return `{${serialized}}`; // 返回花括号包裹的序列化结果
   }
   return String(value);
 };
@@ -483,8 +485,18 @@ const inflightRequestMap = new Map<string, InflightRequestEntry<unknown>>();
 const debounceRequestMap = new Map<string, DebounceRequestEntry<unknown>>();
 
 /**
- * 将外部 AbortSignal 绑定到内部 AbortController
- * 当外部 signal 被 abort 时，内部 controller 也会 abort
+ * 将外部传入的 AbortSignal 绑定到内部 AbortController，实现双向取消同步。
+ *
+ * 调用方传的 signal（如 React Query 或 useEffect 清理函数提供的）与
+ * 模块内部 controller 各自独立 —— 需要让二者联动：
+ *   外部 signal.abort()  →  内部 controller.abort()
+ *
+ * 这样无论哪一方先触发中止，另一端都能感知到并停止请求。
+ *
+ * 防御式处理：
+ * - signal 为空 → 直接返回
+ * - signal.aborted 已为 true → 立即 abort 内部 controller（addEventListener 不会触发已完成的 abort）
+ * - 检查 addEventListener 是否为函数 → 兼容非标准 AbortSignal
  */
 const bindAbortSignal = (
   controller: AbortController,
@@ -493,22 +505,27 @@ const bindAbortSignal = (
   if (!signal) {
     return;
   }
+  // 外部 signal 已经 abort 过了，直接同步 abort 内部 controller
   if (signal.aborted) {
     controller.abort();
     return;
   }
+  // 防御式类型判断：只对真正的 AbortSignal 绑定事件
   if (typeof (signal as AbortSignal).addEventListener === "function") {
     (signal as AbortSignal).addEventListener(
       "abort",
       () => controller.abort(),
-      {
-        once: true,
-      },
+      { once: true }, // 触发一次后自动移除监听器，防止内存泄漏
     );
   }
 };
 
-/** 从 config 中移除 requestPolicy 字段，避免传入 Axios */
+/**
+ * 剥离 config 中的 requestPolicy 字段，返回纯 Axios 配置。
+ *
+ * requestPolicy 是本模块自定义字段，Axios 不认识它，
+ * 直接传入会污染请求头或触发警告。
+ */
 const stripRequestPolicy = <D>(
   config?: AppRequestConfig<D>,
 ): AxiosRequestConfig<D> => {
@@ -523,17 +540,24 @@ const stripRequestPolicy = <D>(
 };
 
 /**
- * 防抖执行：在 debounceMs 内多次调用同一 key 的请求时，
- * 只执行最后一次，但所有调用方共享同一个结果
+ * 防抖执行：在 debounceMs 时间窗口内，同一 key 多次调用时
+ * 只执行最后一次，但所有调用方通过 Promise 共享同一个结果。
+ *
+ * 工作流程：
+ *  1. 首次调用 → 创建防抖条目，启动 debounceMs 定时器
+ *  2. 窗口内再次调用 → 重置定时器，替换为最新的 run 函数
+ *  3. 定时器到期 → 执行最新的 run，将结果 resolve/reject 给所有等待的调用方
+ *  4. 从全局 Map 中清除该 key
  *
  * 典型场景：搜索输入框实时联想，用户连续输入时不立即发请求，
- * 等停止输入 debounceMs 后再发一次
+ * 等停止输入 debounceMs 后再统一发起一次。
  */
 const withDebounce = <T>(
   requestKey: string,
   debounceMs: number,
   run: () => Promise<T>,
 ): Promise<T> => {
+  // debounceMs 为 0 或负数时跳过防抖，直接执行
   if (debounceMs <= 0) {
     return run();
   }
@@ -542,33 +566,44 @@ const withDebounce = <T>(
     | DebounceRequestEntry<T>
     | undefined;
 
-  // 同一 key 已有等待中的防抖 → 重置定时器，替换为最新的 run
+  // 该 key 已有等待中的防抖条目存在（非首次调用）
   if (existing) {
+    // 如果上一次调用创建的定时器还未触发，将其取消
     if (existing.timerId !== null) {
-      clearTimeout(existing.timerId);
+      clearTimeout(existing.timerId); // 清除旧定时器，实现"重置窗口"
     }
+    // 用本次最新的 run 函数替换上一次的，保证最终执行的是最新请求
     existing.run = run;
+    // 返回一个新的 Promise，让本次调用方能拿到最终执行结果
     return new Promise<T>((resolve, reject) => {
+      // 将本次调用方的 resolve/reject 加入回调队列，等待定时器到期后统一通知
       existing.resolvers.push({ resolve, reject });
+      // 重新启动定时器，延迟 debounceMs 后执行最新的 run
       existing.timerId = setTimeout(async () => {
+        // 定时器到期，再次从 Map 中取出当前条目
         const active = debounceRequestMap.get(requestKey) as
           | DebounceRequestEntry<T>
           | undefined;
+        // 条目已被外部清理（极端情况），直接返回，不做任何操作
         if (!active) {
           return;
         }
+        // 从全局 Map 中移除，表示该 key 的防抖流程结束
         debounceRequestMap.delete(requestKey);
         try {
+          // 执行最新的请求函数并等待结果
           const result = await active.run();
+          // 成功：将结果逐个通知给所有等待的调用方
           active.resolvers.forEach((entry) => entry.resolve(result));
         } catch (error) {
+          // 失败：将错误逐个通知给所有等待的调用方
           active.resolvers.forEach((entry) => entry.reject(error));
         }
       }, debounceMs);
     });
   }
 
-  // 首次调用 → 创建防抖条目
+  // 首次调用 → 创建新的防抖条目
   const created: DebounceRequestEntry<T> = {
     timerId: null,
     run,
@@ -579,6 +614,7 @@ const withDebounce = <T>(
   return new Promise<T>((resolve, reject) => {
     created.resolvers.push({ resolve, reject });
     created.timerId = setTimeout(async () => {
+      // 定时器到期，检查该条目是否仍然存在（可能已被外部清理）
       const active = debounceRequestMap.get(requestKey) as
         | DebounceRequestEntry<T>
         | undefined;
@@ -588,8 +624,10 @@ const withDebounce = <T>(
       debounceRequestMap.delete(requestKey);
       try {
         const result = await active.run();
+        // 将结果广播给所有等待的调用方
         active.resolvers.forEach((entry) => entry.resolve(result));
       } catch (error) {
+        // 所有等待的调用方都收到相同的错误
         active.resolvers.forEach((entry) => entry.reject(error));
       }
     }, debounceMs);
@@ -597,12 +635,18 @@ const withDebounce = <T>(
 };
 
 /**
- * Inflight 去重：根据 dedupe 策略处理并发重复请求
+ * Inflight 并发去重：根据 dedupe 策略处理同一 key 的并发重复请求。
  *
- * join:            已有同 key 请求在进行 → 直接返回该请求的 Promise（共享结果）
- * reject:          已有同 key 请求在进行 → 抛出 AppError 拒绝新请求
- * cancel-previous: 已有同 key 请求在进行 → abort 旧请求，发起新请求
- * off:             不做任何处理，直接发起新请求
+ * 四种策略的行为：
+ * | 策略              | 已有同 key 请求在进行中时……                           |
+ * |-------------------|-------------------------------------------------------|
+ * | "join"            | 直接返回已有请求的 Promise，多个调用方共享同一个响应  |
+ * | "reject"          | 抛出 AppError 拒绝新请求，防止重复提交                |
+ * | "cancel-previous" | abort 旧请求，用新请求替换它                          |
+ * | "off"             | 不做任何处理，允许并发重复请求                        |
+ *
+ * 每次请求会创建独立的 AbortController，同时绑定外部 signal。
+ * 请求完成（无论成败）后自动从全局 inflightRequestMap 中移除。
  */
 const withInflightDedup = <T, D>(args: {
   requestKey: string;
@@ -616,29 +660,36 @@ const withInflightDedup = <T, D>(args: {
 
   if (existing) {
     if (args.dedupe === "join") {
+      // 复用已有请求的 Promise，所有调用方拿到相同结果
       return existing.promise;
     }
     if (args.dedupe === "reject") {
+      // 直接拒绝，不发起新请求（常用于防止重复提交）
       throw new AppError(
         ErrorCode.OPERATION_FAILED,
         "Duplicate request is in progress, please retry later.",
       );
     }
     if (args.dedupe === "cancel-previous") {
+      // 取消旧请求，后续代码会创建新请求并替换
       existing.controller.abort();
     }
   }
 
+  // 为本次请求创建独立的 AbortController
   const controller = new AbortController();
+  // 绑定外部 signal：外部 abort 时内部 controller 也 abort
   bindAbortSignal(controller, args.config?.signal);
   const mergedConfig: AxiosRequestConfig<D> = {
     ...(args.config ?? {}),
     signal: controller.signal,
   };
 
-  // 请求完成后自动从 inflightMap 中清除
+  // 请求完成后自动从全局 inflightMap 中清理
   const promise = args.run(mergedConfig).finally(() => {
     const active = inflightRequestMap.get(args.requestKey);
+    // 只有当当前请求仍然是 Map 中的活跃条目时才删除
+    //（防止 cancel-previous 时新请求误删了旧请求之后的新条目）
     if (active?.promise === promise) {
       inflightRequestMap.delete(args.requestKey);
     }
@@ -754,7 +805,11 @@ const executeWithPolicy = <T, D>(args: {
 // ============================================================================
 
 /**
- * 项目中所有 HTTP 请求的统一入口
+ * 项目中所有 HTTP 请求的统一入口。
+ *
+ * 每种方法内部执行相同的管道：
+ *   调用 → executeWithPolicy（去重/防抖）→ Axios 拦截器（注入 Token / 错误映射）
+ *        → 后端 → unwrapResponse（解包 BaseResponse）→ 返回 T
  *
  * 使用方式：
  * ```
@@ -769,12 +824,10 @@ const executeWithPolicy = <T, D>(args: {
  * });
  * ```
  *
- * 每种方法都会：
- * 1. 经过 executeWithPolicy 管道（去重/防抖）
- * 2. 经过 Axios 拦截器（注入 Token / 错误映射）
- * 3. 自动解包 BaseResponse，直接返回 data
+ * GET 请求默认启用 "join" 策略（并发请求共享结果），其余方法默认 "off"。
  */
 const service: HttpClient = {
+  /** GET 请求：自动解包 BaseResponse，默认启用 join 去重策略 */
   async get<T>(url: string, config?: AppRequestConfig) {
     return executeWithPolicy<T, unknown>({
       method: "GET",
@@ -789,6 +842,7 @@ const service: HttpClient = {
       },
     });
   },
+  /** DELETE 请求：自动解包 BaseResponse */
   async delete<T>(url: string, config?: AppRequestConfig) {
     return executeWithPolicy<T, unknown>({
       method: "DELETE",
@@ -803,6 +857,7 @@ const service: HttpClient = {
       },
     });
   },
+  /** POST 请求：自动解包 BaseResponse，支持 requestPolicy 防抖/去重 */
   async post<T, D = unknown>(
     url: string,
     data?: D,
@@ -823,6 +878,7 @@ const service: HttpClient = {
       },
     });
   },
+  /** PUT 请求：自动解包 BaseResponse */
   async put<T, D = unknown>(
     url: string,
     data?: D,
@@ -843,6 +899,7 @@ const service: HttpClient = {
       },
     });
   },
+  /** PATCH 请求：自动解包 BaseResponse */
   async patch<T, D = unknown>(
     url: string,
     data?: D,

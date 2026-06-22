@@ -1,60 +1,58 @@
-import { act, renderHook } from "@testing-library/react";
-import { Provider } from "react-redux";
-import { configureStore } from "@reduxjs/toolkit";
-import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ROUTES } from "@/lib/constants";
-import { useStartNewChatSession } from "@/hooks/chat/useStartNewChatSession";
-import { useHomePageController } from "@/hooks/home/useHomePageController";
-import { useSidebarFooterController } from "@/hooks/layout/useSidebarFooterController";
-import type { ChatMessage } from "@/lib/chat";
-import chatReducer from "@/store/slices/chatSlice";
-import userReducer from "@/store/slices/userSlice";
+import { act, renderHook } from '@testing-library/react'
+import { Provider } from 'react-redux'
+import { configureStore } from '@reduxjs/toolkit'
+import type { ReactNode } from 'react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ROUTES } from '@/lib/constants'
+import { useStartNewChatSession } from '@/hooks/chat/useStartNewChatSession'
+import { useHomePageController } from '@/hooks/home/useHomePageController'
+import { useSidebarFooterController } from '@/hooks/layout/useSidebarFooterController'
+import type { ChatMessage } from '@/lib/chat'
+import chatReducer from '@/store/slices/chatSlice'
+import userReducer from '@/store/slices/userSlice'
 
 // ─── Mock 函数 ───
 
 /** 模拟 React Router 的 navigate 函数 */
-const navigateMock = vi.fn();
+const navigateMock = vi.fn()
 /** 模拟 authService.logout */
-const authLogoutMock = vi.fn();
+const authLogoutMock = vi.fn()
 /** 模拟 React Router 的 useParams 返回值 */
-const useParamsMock = vi.fn();
+const useParamsMock = vi.fn()
 /** 模拟 React Router 的 useLocation 返回值 */
-const useLocationMock = vi.fn();
+const useLocationMock = vi.fn()
 
 // ─── 模块级 Mock ───
 
-vi.mock("react-router-dom", async () => {
+vi.mock('react-router-dom', async () => {
   const actual =
-    await vi.importActual<typeof import("react-router-dom")>(
-      "react-router-dom",
-    );
+    await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
   return {
     ...actual,
     useNavigate: () => navigateMock,
     useParams: () => useParamsMock(),
     useLocation: () => useLocationMock(),
-  };
-});
+  }
+})
 
-vi.mock("@/hooks/useAiModelsQuery", () => ({
+vi.mock('@/hooks/useAiModelsQuery', () => ({
   useAiModelsQuery: () => ({
     models: [
       {
         id: 55,
-        aiName: "Model 55",
+        aiName: 'Model 55',
       },
     ],
   }),
-}));
+}))
 
-vi.mock("@/services/authService", () => ({
+vi.mock('@/services/authService', () => ({
   authService: {
     logout: () => authLogoutMock(),
     login: vi.fn(),
     checkLogin: vi.fn(),
   },
-}));
+}))
 
 // ─── 工具函数 ───
 
@@ -74,7 +72,7 @@ const createStore = () =>
       user: {
         currentUser: {
           id: 1,
-          username: "tester",
+          username: 'tester',
         },
         isAuthenticated: true,
         loading: false,
@@ -84,17 +82,17 @@ const createStore = () =>
       chat: {
         messages: [
           {
-            id: "chat-1",
-            role: "user",
-            content: "stale chat",
+            id: 'chat-1',
+            role: 'user',
+            content: 'stale chat',
             timestamp: 1,
-            status: "done",
+            status: 'done',
           },
         ] as ChatMessage[],
         isStreaming: false,
         error: null,
-        currentSessionId: "session-1",
-        currentSessionTitle: "Session 1",
+        currentSessionId: 'session-1',
+        currentSessionTitle: 'Session 1',
         pendingOutbound: null,
         activeStreamRequestId: null,
         activeStreamSessionId: null,
@@ -102,7 +100,7 @@ const createStore = () =>
         isStartingNewSession: false,
       },
     },
-  });
+  })
 
 /**
  * 渲染 Hook 的测试辅助函数，包裹 Redux Provider。
@@ -111,20 +109,20 @@ const createStore = () =>
  * @returns 渲染结果（含 result、store、rerender、unmount）
  */
 const renderWithStore = <T,>(callback: () => T) => {
-  const store = createStore();
+  const store = createStore()
   const wrapper = ({ children }: { children: ReactNode }) => (
     <Provider store={store}>{children}</Provider>
-  );
+  )
 
   const rendered = renderHook(callback, {
     wrapper,
-  });
+  })
 
   return {
     ...rendered,
     store,
-  };
-};
+  }
+}
 
 /**
  * 聊天运行时重置入口点测试套件。
@@ -137,16 +135,16 @@ const renderWithStore = <T,>(callback: () => T) => {
  * - useHomePageController：首页发送消息跳转到聊天页
  * - useSidebarFooterController：侧边栏底部登出操作
  */
-describe("chat runtime reset entrypoints", () => {
+describe('聊天运行时重置入口点', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    authLogoutMock.mockResolvedValue(undefined);
-    useParamsMock.mockReturnValue({});
+    vi.clearAllMocks()
+    authLogoutMock.mockResolvedValue(undefined)
+    useParamsMock.mockReturnValue({})
     useLocationMock.mockReturnValue({
-      key: "default-location",
+      key: 'default-location',
       state: null,
-    });
-  });
+    })
+  })
 
   /**
    * 验证 useStartNewChatSession：先清空 runtime + 设置过渡标志，再导航到 /chat。
@@ -159,26 +157,26 @@ describe("chat runtime reset entrypoints", () => {
    * navigate 的 mockImplementationOnce 用于在导航回调中检查 Redux 状态，
    * 确保 beginNewChatSession 的 dispatch 先于 navigate 执行。
    */
-  it("clears runtime and sets transition flag before navigating to /chat", () => {
-    const { result, store } = renderWithStore(() => useStartNewChatSession());
+  it('导航到 /chat 前清空 runtime 并设置过渡标志', () => {
+    const { result, store } = renderWithStore(() => useStartNewChatSession())
 
     navigateMock.mockImplementationOnce(() => {
-      const chat = store.getState().chat;
-      expect(chat.currentSessionId).toBeNull();
-      expect(chat.isStartingNewSession).toBe(true);
-    });
+      const chat = store.getState().chat
+      expect(chat.currentSessionId).toBeNull()
+      expect(chat.isStartingNewSession).toBe(true)
+    })
 
     act(() => {
-      result.current();
-    });
+      result.current()
+    })
 
     expect(navigateMock).toHaveBeenCalledWith(ROUTES.chat, {
       replace: true,
-    });
-    expect(store.getState().chat.currentSessionId).toBeNull();
-    expect(store.getState().chat.messages).toHaveLength(0);
-    expect(store.getState().chat.isStartingNewSession).toBe(true);
-  });
+    })
+    expect(store.getState().chat.currentSessionId).toBeNull()
+    expect(store.getState().chat.messages).toHaveLength(0)
+    expect(store.getState().chat.isStartingNewSession).toBe(true)
+  })
 
   /**
    * 验证从首页发送消息时，在导航到聊天页之前清空 chat runtime。
@@ -190,29 +188,29 @@ describe("chat runtime reset entrypoints", () => {
    *
    * 这样可以确保聊天页在接收 initialQuery 时不会与旧 runtime 数据冲突。
    */
-  it("resets the chat runtime before navigating from HomePage", async () => {
-    const { result, store } = renderWithStore(() => useHomePageController());
+  it('从首页导航前重置聊天运行时', async () => {
+    const { result, store } = renderWithStore(() => useHomePageController())
 
     act(() => {
-      result.current.setQuery("new topic");
-    });
+      result.current.setQuery('new topic')
+    })
 
     await act(async () => {
-      await result.current.handleSend();
-    });
+      await result.current.handleSend()
+    })
 
-    expect(store.getState().chat.currentSessionId).toBeNull();
-    expect(store.getState().chat.messages).toHaveLength(0);
+    expect(store.getState().chat.currentSessionId).toBeNull()
+    expect(store.getState().chat.messages).toHaveLength(0)
     expect(navigateMock).toHaveBeenCalledWith(ROUTES.chat, {
       state: {
         model: {
           id: 55,
-          aiName: "Model 55",
+          aiName: 'Model 55',
         },
-        initialQuery: "new topic",
+        initialQuery: 'new topic',
       },
-    });
-  });
+    })
+  })
 
   /**
    * 验证登出时，先清空 chat runtime 再导航到登录页。
@@ -226,17 +224,17 @@ describe("chat runtime reset entrypoints", () => {
    * 确保登出后不会残留上一个用户的聊天数据，
    * 且下一位登录的用户不会看到不属于他的会话。
    */
-  it("resets the chat runtime after logout before navigating to auth", async () => {
+  it('登出后导航到登录页前重置聊天运行时', async () => {
     const { result, store } = renderWithStore(() =>
       useSidebarFooterController(),
-    );
+    )
 
     await act(async () => {
-      await result.current.handleLogout();
-    });
+      await result.current.handleLogout()
+    })
 
-    expect(store.getState().chat.currentSessionId).toBeNull();
-    expect(store.getState().chat.messages).toHaveLength(0);
-    expect(navigateMock).toHaveBeenCalledWith(ROUTES.auth);
-  });
-});
+    expect(store.getState().chat.currentSessionId).toBeNull()
+    expect(store.getState().chat.messages).toHaveLength(0)
+    expect(navigateMock).toHaveBeenCalledWith(ROUTES.auth)
+  })
+})

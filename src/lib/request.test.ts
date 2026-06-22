@@ -16,15 +16,15 @@ vi.mock("@/lib/authToken", () => ({
   getAuthToken: vi.fn(),
 }));
 
-describe("request utilities", () => {
-  it("requires auth token for protected business endpoints", () => {
+describe("请求工具函数", () => {
+  it("受保护的业务端点需要认证令牌", () => {
     expect(requiresAuthTokenForRequest("/xunzhi/v1/interview/sessions")).toBe(
       true,
     );
     expect(requiresAuthTokenForRequest("/xunzhi/v1/users/login")).toBe(false);
   });
 
-  it("throws unauthorized before request when protected endpoint has no token", () => {
+  it("当受保护端点没有令牌时，在请求前抛出未授权错误", () => {
     vi.mocked(getAuthToken).mockReturnValue(null);
 
     expect(() =>
@@ -35,7 +35,7 @@ describe("request utilities", () => {
     ).toThrow("Unauthorized");
   });
 
-  it("allows protected endpoint when token exists", () => {
+  it("当令牌存在时，允许访问受保护端点", () => {
     vi.mocked(getAuthToken).mockReturnValue("token-value");
 
     expect(assertRequestAuthorized("/xunzhi/v1/interview/sessions")).toBe(
@@ -43,7 +43,7 @@ describe("request utilities", () => {
     );
   });
 
-  it("buildApiUrl should append query params and skip empty values", () => {
+  it("buildApiUrl 应追加查询参数并跳过空值", () => {
     const url = buildApiUrl("/hello", {
       a: 1,
       b: true,
@@ -60,7 +60,7 @@ describe("request utilities", () => {
     expect(url).not.toContain("e=");
   });
 
-  it("unwrapResponseData should return base response data for success payload", () => {
+  it("unwrapResponseData 应返回成功响应的 data 字段", () => {
     const result = unwrapResponseData({
       code: "0",
       message: null,
@@ -72,12 +72,12 @@ describe("request utilities", () => {
     expect(result).toEqual({ ok: true });
   });
 
-  it("unwrapResponseData should return raw payload for non-base response", () => {
+  it("unwrapResponseData 对于非标准响应应返回原始 payload", () => {
     const result = unwrapResponseData({ plain: true });
     expect(result).toEqual({ plain: true });
   });
 
-  it("unwrapResponseData should throw AppError for failed business response", () => {
+  it("unwrapResponseData 应在业务响应失败时抛出 AppError", () => {
     expect(() =>
       unwrapResponseData({
         code: "403",
@@ -102,7 +102,7 @@ describe("request utilities", () => {
     }
   });
 
-  it("mapAxiosErrorToAppError should map http status codes", () => {
+  it("mapAxiosErrorToAppError 应映射 HTTP 状态码", () => {
     const axiosError = {
       message: "Not Found",
       response: {
@@ -115,7 +115,7 @@ describe("request utilities", () => {
     expect(mapped.code).toBe(ErrorCode.RESOURCE_NOT_FOUND);
   });
 
-  it("mapAxiosErrorToAppError should map timeout and cancellation", () => {
+  it("mapAxiosErrorToAppError 应映射超时和取消错误", () => {
     const timeoutError = {
       message: "timeout",
       code: "ECONNABORTED",
@@ -131,7 +131,7 @@ describe("request utilities", () => {
     expect(mapAxiosErrorToAppError(cancelError).code).toBe(ErrorCode.ABORTED);
   });
 
-  it("resolveRequestPolicy should default to GET join and POST off", () => {
+  it("resolveRequestPolicy 应默认为 GET 合并请求和 POST 关闭策略", () => {
     expect(resolveRequestPolicy("GET")).toEqual({
       dedupe: "join",
       debounceMs: 0,
@@ -144,7 +144,7 @@ describe("request utilities", () => {
     });
   });
 
-  it("buildRequestPolicyKey should be stable for same semantic payload", () => {
+  it("buildRequestPolicyKey 应对语义相同的 payload 生成稳定的键", () => {
     const keyA = buildRequestPolicyKey({
       method: "post",
       url: "/xunzhi/v1/interview/sessions",
